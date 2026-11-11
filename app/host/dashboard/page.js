@@ -12,6 +12,7 @@ export default function Dashboard() {
   const [questions, setQuestions] = useState([]);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const [creatingGame, setCreatingGame] = useState(false);
 
   async function loadDashboard() {
     const { data: { user } } = await supabase.auth.getUser();
@@ -70,18 +71,23 @@ export default function Dashboard() {
   }, []);
 
   async function createGame() {
+    if (creatingGame) return;
+
+    setCreatingGame(true);
     setMessage("");
 
     const { error } = await supabase.rpc("create_trivia_game");
 
     if (error) {
       setMessage(error.message);
+      setCreatingGame(false);
       return;
     }
 
     setMessage("New game created!");
     setLoading(true);
     await loadDashboard();
+    setCreatingGame(false);
   }
 
   async function controlGame(action, questionNumber = null) {
@@ -123,8 +129,9 @@ export default function Dashboard() {
   }
 
   const currentQuestion = questions.find(
-    (question) => question.question_number === game?.current_question
-      && question.is_released
+    (question) =>
+      question.question_number === game?.current_question &&
+      question.is_released
   );
 
   return (
@@ -142,7 +149,9 @@ export default function Dashboard() {
       {!game ? (
         <>
           <h2>No game found</h2>
-          <button onClick={createGame}>Start New Game</button>
+          <button onClick={createGame} disabled={creatingGame}>
+            {creatingGame ? "Creating..." : "Start New Game"}
+          </button>
         </>
       ) : (
         <>
@@ -163,23 +172,45 @@ export default function Dashboard() {
             </p>
             <p>Current question: {game.current_question}</p>
 
-            <button onClick={() => controlGame("open_registration")}>
-              Open Registration
-            </button>
+            {game.status !== "finished" && (
+              <>
+                <button onClick={() => controlGame("open_registration")}>
+                  Open Registration
+                </button>
 
-            <button
-              onClick={() => controlGame("close_registration")}
-              style={{ marginLeft: 8 }}
-            >
-              Close Registration
-            </button>
+                <button
+                  onClick={() => controlGame("close_registration")}
+                  style={{ marginLeft: 8 }}
+                >
+                  Close Registration
+                </button>
 
-            <button
-              onClick={() => controlGame("finish_game")}
-              style={{ marginLeft: 8 }}
-            >
-              End Game
-            </button>
+                <button
+                  onClick={() => controlGame("finish_game")}
+                  style={{ marginLeft: 8 }}
+                >
+                  End Game
+                </button>
+              </>
+            )}
+
+            {game.status === "finished" && (
+              <section style={{
+                marginTop: 20,
+                padding: 15,
+                border: "2px solid #287a43",
+                borderRadius: 8
+              }}>
+                <h3>Game Finished</h3>
+                <p>You can now create a fresh game.</p>
+                <button
+                  onClick={createGame}
+                  disabled={creatingGame}
+                >
+                  {creatingGame ? "Creating..." : "Start New Game"}
+                </button>
+              </section>
+            )}
           </section>
 
           {currentQuestion && game.status === "active" && (
@@ -197,9 +228,7 @@ export default function Dashboard() {
               {game.answer_revealed ? (
                 <p><strong>The answer has been revealed to players.</strong></p>
               ) : (
-                <button
-                  onClick={() => controlGame("reveal_answer")}
-                >
+                <button onClick={() => controlGame("reveal_answer")}>
                   Reveal Answer
                 </button>
               )}
@@ -247,21 +276,20 @@ export default function Dashboard() {
 
       <hr />
 
-   
-<button onClick={() => router.push("/host/questions")}>
-  Manage Questions
-</button>
+      <button onClick={() => router.push("/host/questions")}>
+        Manage Questions
+      </button>
 
-<button
-  onClick={() => router.push("/host/winners")}
-  style={{ marginLeft: 10 }}
->
-  View Winners
-</button>
+      <button
+        onClick={() => router.push("/host/winners")}
+        style={{ marginLeft: 10 }}
+      >
+        View Winners
+      </button>
 
-<button onClick={signOut} style={{ marginLeft: 10 }}>
-  Sign Out
-</button>
+      <button onClick={signOut} style={{ marginLeft: 10 }}>
+        Sign Out
+      </button>
     </main>
   );
 }
