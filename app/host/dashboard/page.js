@@ -8,53 +8,97 @@ import { supabase } from "../../../lib/supabase";
 export default function Dashboard() {
   const router = useRouter();
   const [role, setRole] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
   const [game, setGame] = useState(null);
+  const [questions, setQuestions] = useState([]);
   const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function checkHost() {
-      const { data: { user } } = await supabase.auth.getUser();
+  async function loadDashboard() {
+    const { data: { user } } = await supabase.auth.getUser();
 
-      if (!user) {
-        router.replace("/host");
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from("host_roles")
-        .select("role, approved")
-        .eq("user_id", user.id)
-        .single();
-
-      if (error || !data?.approved) {
-        await supabase.auth.signOut();
-        router.replace("/host");
-        return;
-      }
-
-      setRole(data.role);
-      setLoading(false);
+    if (!user) {
+      router.replace("/host");
+      return;
     }
 
-    checkHost();
-  }, [router]);
+    const { data: roleData, error: roleError } = await supabase
+      .from("host_roles")
+      .select("role, approved")
+      .eq("user_id", user.id)
+      .single();
 
-  async function startNewGame() {
-    setCreating(true);
+    if (roleError || !roleData?.approved) {
+      await supabase.auth.signOut();
+      router.replace("/host");
+      return;
+    }
+
+    setRole(roleData.role);
+
+    const { data: gameData, error } = await supabase.rpc(
+      "host_get_latest_game"
+    );
+
+    if (error) {
+      setMessage(error.message);
+      setLoading(false);
+      return;
+    }
+
+    setGame(gameData);
+
+    if (gameData) {
+      const { data: questionData, error: questionError } =
+        await supabase
+          .from("questions")
+          .select("question_number, round_number, prompt, is_released")
+          .eq("game_id", gameData.id)
+          .order("question_number");
+
+      if (questionError) {
+        setMessage(questionError.message);
+      } else {
+        setQuestions(questionData || []);
+      }
+    }
+
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    loadDashboard();
+  }, []);
+
+  async function createGame() {
     setMessage("");
-    setGame(null);
 
     const { data, error } = await supabase.rpc("create_trivia_game");
 
     if (error) {
       setMessage(error.message);
-    } else {
-      setGame(data);
+      return;
     }
 
-    setCreating(false);
+    setMessage("New game created!");
+    await loadDashboard();
+  }
+
+  async function controlGame(action, questionNumber = null) {
+    setMessage("");
+
+    const { error } = await supabase.rpc("host_control_game", {
+      p_game_id: game.id,
+      p_action: action,
+      p_question_number: questionNumber
+    });
+
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+
+    setMessage("Game updated!");
+    await loadDashboard();
   }
 
   async function signOut() {
@@ -68,7 +112,7 @@ export default function Dashboard() {
 
   return (
     <main style={{
-      maxWidth: 800,
+      maxWidth: 850,
       margin: "40px auto",
       padding: 24,
       fontFamily: "Arial, sans-serif"
@@ -76,44 +120,94 @@ export default function Dashboard() {
       <h1>BrewHausTrivia Host Dashboard</h1>
       <p>Welcome! Your role: {role}</p>
 
+      {message && <p>{message}</p>}
+
+      {!game ? (
+        <>
+          <h2>No game found</h2>
+          <button onClick={createGame}>Start New Game</button>
+        </>
+      ) : (
+        <>
+          <section style={{
+            border: "2px solid #333",
+            borderRadius: 10,
+            padding: 20,
+            marginBottom: 25
+          }}>
+            <h2>Current Game</h2>
+            <p>Game code:</p>
+            <h1 style={{ fontSize: 42, letterSpacing: 6 }}>
+              {game.game_code}
+            </h1>
+            <p>Status: {game.status}</p>
+            <p>
+              Registration: {game.registration_open ? "Open" : "Closed"}
+            </p>
+            <p>Current question: {game.current_question}</p>
+
+            <button onClick={() => controlGame("open_registration")}>
+              Open Registration
+            </button>
+
+            <button
+              onClick={() => controlGame("close_registration")}
+              style={{ marginLeft: 8 }}
+            >
+              Close Registration
+            </button>
+
+            <button
+              onClick={() => controlGame("finish_game")}
+              style={{ marginLeft: 8 }}
+            >
+              End Game
+            </button>
+          </section>
+
+          <h2>Questions</h2>
+
+          {questions.length === 0 && (
+            <p>No questions have been added to this game yet.</p>
+          )}
+
+          {questions.map((question) => (
+            <section
+              key={question.question_number}
+              style={{
+                border: "1px solid #ccc",
+                borderRadius: 8,
+                padding: 15,
+                marginBottom: 12
+              }}
+            >
+              <h3>
+                Round {question.round_number} · Question {question.question_number}
+              </h3>
+
+              <p>{question.prompt}</p>
+
+              <button
+                onClick={() =>
+                  controlGame("release_question", question.question_number)
+                }
+              >
+                Release This Question
+              </button>
+
+              {question.is_released && <p>Currently released</p>}
+            </section>
+          )}
+        </>
+      )}
+
       <hr />
 
-      <h2>Game Management</h2>
+      <button onClick={createGame}>Start New Game</button>
 
-      <button onClick={startNewGame} disabled={creating}>
-        {creating ? "Creating Game..." : "Start New Game"}
+      <button onClick={signOut} style={{ marginLeft: 10 }}>
+        Sign Out
       </button>
-
-      {message && (
-        <p style={{ color: "red" }}>{message}</p>
-      )}
-
-      {game && (
-        <section style={{
-          marginTop: 25,
-          padding: 20,
-          border: "2px solid #333",
-          borderRadius: 10
-        }}>
-          <h2>Your Game Is Ready!</h2>
-          <p>Give players this code to join:</p>
-          <h1 style={{ fontSize: 42, letterSpacing: 6 }}>
-            {game.game_code}
-          </h1>
-          <p>Status: {game.status}</p>
-        </section>
-      )}
-
-      <hr />
-
-      <h2>Coming Next</h2>
-      <p>Manage Questions</p>
-      <p>Manage Players</p>
-      <p>View Leaderboard</p>
-
-      {role === "owner" && <p>Manage Hosts</p>}
-
-      <button onClick={signOut}>Sign Out</button>
     </main>
   );
 }
