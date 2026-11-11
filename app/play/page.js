@@ -1,77 +1,117 @@
-  1
-  2
-  3
-  4
-  5
-  6
-  7
-  8
-  9
- 10
- 11
- 12
- 13
- 14
- 15
- 16
- 17
- 18
- 19
- 20
- 21
- 22
- 23
- 24
- 25
- 26
- 27
- 28
- 29
- 30
- 31
- 32
- 33
- 34
- 35
- 36
- 37
- 38
- 39
- 40
- 41
- 42
- 43
- 44
- 45
- 46
- 47
- 48
- 49
- 50
- 51
- 52
- 53
- 54
- 55
- 56
- 57
- 58
- 59
- 60
- 61
- 62
- 63
- 64
- 65
- 66
- 67
- 68
- 69
- 70
- 71
-d
-c
-c
+
+"use client";
+
+import { useEffect, useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { supabase } from "../../lib/supabase";
+
+function PlayContent() {
+  const searchParams = useSearchParams();
+  const playerId = searchParams.get("player");
+
+  const [player, setPlayer] = useState(null);
+  const [question, setQuestion] = useState(null);
+  const [answer, setAnswer] = useState("");
+  const [message, setMessage] = useState("Loading game...");
+  const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    if (!playerId) {
+      setMessage("Please join a game first.");
+      return;
+    }
+
+    let channel;
+    let stopped = false;
+
+    function updateGame(data) {
+      setPlayer(data.player);
+      setQuestion(data.question || null);
+
+      const alreadySubmitted = Boolean(data.question?.has_submitted);
+
+      setSubmitted(alreadySubmitted);
+      setAnswer(data.question?.submitted_answer || "");
+
+      if (alreadySubmitted) {
+        setMessage(
+          data.question.points_awarded === 1
+            ? "Correct! You earned 1 point."
+            : "Answer submitted!"
+        );
+      } else {
+        setMessage(
+          data.question
+            ? ""
+            : data.game_status === "finished"
+              ? "This game has ended. Thanks for playing!"
+              : "Waiting for the host to release the next question..."
+        );
+      }
+    }
+
+    async function refreshGame(token) {
+      const { data, error } = await supabase.rpc(
+        "get_player_game",
+        {
+          p_player_id: playerId,
+          p_session_token: token
+        }
+      );
+
+      if (error || !data || stopped) return;
+
+      updateGame(data);
+    }
+
+    async function loadGame() {
+      const token = sessionStorage.getItem("trivia_session_token");
+
+      if (!token) {
+        setMessage("Your player session was not found. Please join again.");
+        return;
+      }
+
+      const { data, error } = await supabase.rpc(
+        "get_player_game",
+        {
+          p_player_id: playerId,
+          p_session_token: token
+        }
+      );
+
+      if (error || !data) {
+        setMessage("Could not load your game. Please join again.");
+        return;
+      }
+
+      if (stopped) return;
+
+      updateGame(data);
+
+      channel = supabase
+        .channel(`game-${data.game_id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "games",
+            filter: `id=eq.${data.game_id}`
+          },
+          () => refreshGame(token)
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "questions",
+            filter: `game_id=eq.${data.game_id}`
+          },
+          () => refreshGame(token)
+        )
+        .subscribe();
     }
 
     loadGame();
@@ -112,6 +152,14 @@ c
     }
 
     setSubmitted(true);
+
+    setQuestion((current) => ({
+      ...current,
+      has_submitted: true,
+      submitted_answer: answer.trim(),
+      points_awarded: data.points_awarded
+    }));
+
     setMessage(
       data.points_awarded === 1
         ? "Correct! You earned 1 point."
@@ -140,4 +188,60 @@ c
           <h3>Your score: {player.total_score}</h3>
 
           {question ? (
-Use Control + Shift + m to toggle the tab key moving focus. Alternatively, use esc then tab to move to the next interactive element o
+            <section>
+              <p>
+                Round {question.round_number} · Question {question.question_number}
+              </p>
+
+              <h2>{question.prompt}</h2>
+
+              <form onSubmit={submitAnswer}>
+                <input
+                  value={answer}
+                  onChange={(event) => setAnswer(event.target.value)}
+                  placeholder="Type your answer"
+                  disabled={submitted}
+                  style={{
+                    width: "100%",
+                    padding: 14,
+                    boxSizing: "border-box",
+                    marginBottom: 12
+                  }}
+                />
+
+                <button
+                  type="submit"
+                  disabled={submitted || !answer.trim()}
+                >
+                  {submitted ? "Answer Submitted" : "Submit Answer"}
+                </button>
+              </form>
+
+              {question.correct_answer ? (
+                <section style={{
+                  marginTop: 24,
+                  padding: 16,
+                  background: "#e8f5e9",
+                  borderRadius: 8
+                }}>
+                  <h3>Correct Answer</h3>
+                  <p>{question.correct_answer}</p>
+                </section>
+              ) : null}
+            </section>
+          ) : null}
+        </>
+      ) : null}
+
+      {message && <p>{message}</p>}
+    </main>
+  );
+}
+
+export default function PlayPage() {
+  return (
+    <Suspense fallback={<main>Loading game...</main>}>
+      <PlayContent />
+    </Suspense>
+  );
+}
