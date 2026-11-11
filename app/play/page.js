@@ -80,6 +80,8 @@ function PlayContent() {
         }
       );
 
+      console.log("PLAYER GAME DATA:", data);
+console.log("PLAYER GAME ERROR:", error);
       if (error || !data) {
         setMessage("Could not load your game. Please join again.");
         return;
