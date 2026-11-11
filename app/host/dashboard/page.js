@@ -49,17 +49,17 @@ export default function Dashboard() {
 
     if (gameData) {
       const { data: questionData, error: questionError } =
-        await supabase
-          .from("questions")
-          .select("question_number, round_number, prompt, is_released")
-          .eq("game_id", gameData.id)
-          .order("question_number");
+        await supabase.rpc("host_get_questions", {
+          p_game_id: gameData.id
+        });
 
       if (questionError) {
         setMessage(questionError.message);
       } else {
         setQuestions(questionData || []);
       }
+    } else {
+      setQuestions([]);
     }
 
     setLoading(false);
@@ -72,7 +72,7 @@ export default function Dashboard() {
   async function createGame() {
     setMessage("");
 
-    const { data, error } = await supabase.rpc("create_trivia_game");
+    const { error } = await supabase.rpc("create_trivia_game");
 
     if (error) {
       setMessage(error.message);
@@ -80,10 +80,13 @@ export default function Dashboard() {
     }
 
     setMessage("New game created!");
+    setLoading(true);
     await loadDashboard();
   }
 
   async function controlGame(action, questionNumber = null) {
+    if (!game) return;
+
     setMessage("");
 
     const { error } = await supabase.rpc("host_control_game", {
@@ -97,7 +100,12 @@ export default function Dashboard() {
       return;
     }
 
-    setMessage("Game updated!");
+    setMessage(
+      action === "release_question"
+        ? `Question ${questionNumber} released!`
+        : "Game updated!"
+    );
+
     await loadDashboard();
   }
 
@@ -187,15 +195,18 @@ export default function Dashboard() {
 
               <p>{question.prompt}</p>
 
-              <button
-                onClick={() =>
-                  controlGame("release_question", question.question_number)
-                }
-              >
-                Release This Question
-              </button>
-
-              {question.is_released && <p>Currently released</p>}
+              {question.is_released ? (
+                <p><strong>Currently released</strong></p>
+              ) : (
+                <button
+                  onClick={() =>
+                    controlGame("release_question", question.question_number)
+                  }
+                  disabled={game.status === "finished"}
+                >
+                  Release This Question
+                </button>
+              )}
             </section>
           ))}
         </>
@@ -203,7 +214,9 @@ export default function Dashboard() {
 
       <hr />
 
-      <button onClick={createGame}>Start New Game</button>
+      <button onClick={() => router.push("/host/questions")}>
+        Manage Questions
+      </button>
 
       <button onClick={signOut} style={{ marginLeft: 10 }}>
         Sign Out
