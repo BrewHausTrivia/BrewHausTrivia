@@ -5,7 +5,7 @@ import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
-export default function PlayPage() {
+function PlayContent() {
   const searchParams = useSearchParams();
   const playerId = searchParams.get("player");
 
@@ -208,5 +208,12 @@ export default function PlayPage() {
 
       {message && <p>{message}</p>}
     </main>
+  );
+}
+export default function PlayPage() {
+  return (
+    <Suspense fallback={<main>Loading game...</main>}>
+      <PlayContent />
+    </Suspense>
   );
 }
