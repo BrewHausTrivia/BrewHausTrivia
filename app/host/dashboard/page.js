@@ -247,13 +247,21 @@ export default function Dashboard() {
 
       <hr />
 
-      <button onClick={() => router.push("/host/questions")}>
-        Manage Questions
-      </button>
+   
+<button onClick={() => router.push("/host/questions")}>
+  Manage Questions
+</button>
 
-      <button onClick={signOut} style={{ marginLeft: 10 }}>
-        Sign Out
-      </button>
+<button
+  onClick={() => router.push("/host/winners")}
+  style={{ marginLeft: 10 }}
+>
+  View Winners
+</button>
+
+<button onClick={signOut} style={{ marginLeft: 10 }}>
+  Sign Out
+</button>
     </main>
   );
 }
