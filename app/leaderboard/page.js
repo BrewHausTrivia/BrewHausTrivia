@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState, Suspense } from "react";
@@ -64,52 +63,95 @@ function LeaderboardContent() {
 
   return (
     <main style={{
-      maxWidth: 650,
-      margin: "40px auto",
-      padding: 24,
-      fontFamily: "Arial, sans-serif",
-      textAlign: "center"
+      minHeight: "100vh",
+      background: "#171717",
+      color: "white",
+      padding: "40px 20px",
+      fontFamily: "Arial, sans-serif"
     }}>
-      <h1>BrewHausTrivia</h1>
-      <h2>Live Leaderboard</h2>
+      <div style={{
+        maxWidth: 700,
+        margin: "0 auto",
+        textAlign: "center"
+      }}>
 
-      <p>Rankings update automatically every 3 seconds.</p>
+        <h1 style={{
+          fontSize: 38,
+          color: "#D6A84F",
+          marginBottom: 8
+        }}>
+          BrewHausTrivia
+        </h1>
 
-      {loading && <p>Loading leaderboard...</p>}
+        <p style={{
+          color: "#aaa",
+          marginBottom: 35
+        }}>
+          THE ULTIMATE TRIVIA CHALLENGE
+        </p>
 
-      {players.length > 0 && (
-        <div style={{ marginTop: 24 }}>
-          {players.map((player) => (
-            <div
-              key={player.rank}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                padding: 16,
-                marginBottom: 10,
-                border: "1px solid #ddd",
-                borderRadius: 10,
-                background: player.rank === 1 ? "#fff3cd" : "#fff"
-              }}
-            >
-              <strong>
-                #{player.rank} {player.nickname}
-              </strong>
+        <h2 style={{
+          fontSize: 30,
+          marginBottom: 8
+        }}>
+          🏆 Live Leaderboard
+        </h2>
 
-              <strong>
-                {player.total_score} points
-              </strong>
-            </div>
-          ))}
-        </div>
-      )}
+        <p style={{
+          color: "#aaa",
+          fontSize: 14,
+          marginBottom: 30
+        }}>
+          Rankings update automatically every 3 seconds.
+        </p>
 
-      {!loading && players.length === 0 && !message && (
-        <p>No players have joined yet.</p>
-      )}
+        {loading && <p>Loading leaderboard...</p>}
 
-      {message && <p>{message}</p>}
+        {players.map((player) => (
+          <div
+            key={player.rank}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "20px",
+              marginBottom: 12,
+              borderRadius: 12,
+              background: player.rank === 1
+                ? "#D6A84F"
+                : "#292929",
+              color: player.rank === 1 ? "#171717" : "white",
+              border: player.rank === 1
+                ? "2px solid #F5D58A"
+                : "1px solid #444",
+              fontSize: 18
+            }}
+          >
+            <strong>
+              {player.rank === 1 ? "🥇" :
+               player.rank === 2 ? "🥈" :
+               player.rank === 3 ? "🥉" :
+               `#${player.rank}`}
+              {" "}{player.nickname}
+            </strong>
+
+            <strong>
+              {player.total_score} points
+            </strong>
+          </div>
+        ))}
+
+        {!loading && players.length === 0 && !message && (
+          <p>No players have joined yet.</p>
+        )}
+
+        {message && (
+          <p style={{ color: "#D6A84F" }}>
+            {message}
+          </p>
+        )}
+
+      </div>
     </main>
   );
 }
