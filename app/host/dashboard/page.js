@@ -8,7 +8,10 @@ import { supabase } from "../../../lib/supabase";
 export default function HostDashboard() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
   const [hostRole, setHostRole] = useState("");
+  const [game, setGame] = useState(null);
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
     async function checkHost() {
@@ -38,6 +41,24 @@ export default function HostDashboard() {
     checkHost();
   }, [router]);
 
+  async function startNewGame() {
+    setCreating(true);
+    setMessage("");
+    setGame(null);
+
+    const { data, error } = await supabase.rpc("create_trivia_game");
+
+    if (error) {
+      setMessage("Could not create game: " + error.message);
+      setCreating(false);
+      return;
+    }
+
+    setGame(data);
+    setMessage("Your new trivia game is ready!");
+    setCreating(false);
+  }
+
   async function signOut() {
     await supabase.auth.signOut();
     router.replace("/host");
@@ -61,7 +82,26 @@ export default function HostDashboard() {
 
         <div style={styles.panel}>
           <h3>Game Management</h3>
-          <button style={styles.button}>Start New Game</button>
+
+          <button
+            onClick={startNewGame}
+            disabled={creating}
+            style={styles.button}
+          >
+            {creating ? "Creating Game..." : "START NEW GAME"}
+          </button>
+
+          {message && <p>{message}</p>}
+
+          {game && (
+            <div style={styles.gameBox}>
+              <h3>Your Game Code</h3>
+              <p style={styles.gameCode}>{game.game_code}</p>
+              <p>Players can use this code to join your game.</p>
+              <p>Status: {game.status}</p>
+            </div>
+          )}
+
           <button style={styles.button}>Manage Questions</button>
           <button style={styles.button}>Manage Players</button>
           <button style={styles.button}>View Leaderboard</button>
@@ -116,6 +156,18 @@ const styles = {
     borderRadius: "8px",
     fontWeight: "bold",
     cursor: "pointer"
+  },
+  gameBox: {
+    background: "#101820",
+    padding: "20px",
+    borderRadius: "12px",
+    marginTop: "20px"
+  },
+  gameCode: {
+    color: "#E6A23C",
+    fontSize: "36px",
+    fontWeight: "bold",
+    letterSpacing: "6px"
   },
   signOut: {
     marginTop: "25px",
