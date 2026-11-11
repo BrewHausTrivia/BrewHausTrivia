@@ -139,7 +139,7 @@ export default function TVLeaderboard() {
                   </span>
 
                   <span style={styles.score}>
-                    {player.total_score} PTS
+                    {player.total_score} POINTS
                   </span>
                 </div>
               ))
