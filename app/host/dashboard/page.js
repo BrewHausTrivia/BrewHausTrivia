@@ -100,11 +100,15 @@ export default function Dashboard() {
       return;
     }
 
-    setMessage(
-      action === "release_question"
-        ? `Question ${questionNumber} released!`
-        : "Game updated!"
-    );
+    if (action === "release_question") {
+      setMessage(`Question ${questionNumber} released!`);
+    } else if (action === "reveal_answer") {
+      setMessage("Correct answer revealed to players!");
+    } else if (action === "finish_game") {
+      setMessage("Game ended!");
+    } else {
+      setMessage("Game updated!");
+    }
 
     await loadDashboard();
   }
@@ -117,6 +121,11 @@ export default function Dashboard() {
   if (loading) {
     return <main style={{ padding: 30 }}>Loading dashboard...</main>;
   }
+
+  const currentQuestion = questions.find(
+    (question) => question.question_number === game?.current_question
+      && question.is_released
+  );
 
   return (
     <main style={{
@@ -172,6 +181,30 @@ export default function Dashboard() {
               End Game
             </button>
           </section>
+
+          {currentQuestion && game.status === "active" && (
+            <section style={{
+              border: "2px solid #333",
+              borderRadius: 10,
+              padding: 20,
+              marginBottom: 25
+            }}>
+              <h2>Current Question Controls</h2>
+              <p>
+                Question {currentQuestion.question_number} is currently live.
+              </p>
+
+              {game.answer_revealed ? (
+                <p><strong>The answer has been revealed to players.</strong></p>
+              ) : (
+                <button
+                  onClick={() => controlGame("reveal_answer")}
+                >
+                  Reveal Answer
+                </button>
+              )}
+            </section>
+          )}
 
           <h2>Questions</h2>
 
