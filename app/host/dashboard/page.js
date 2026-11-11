@@ -197,7 +197,7 @@ export default function Dashboard() {
 
               {question.is_released && <p>Currently released</p>}
             </section>
-          )}
+          ))}
         </>
       )}
 
