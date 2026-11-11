@@ -15,6 +15,17 @@ export default function JoinGame() {
   async function joinGame(event) {
     event.preventDefault();
     setMessage("");
+
+    if (gameCode.trim().length !== 6) {
+      setMessage("Please enter the 6-character game code.");
+      return;
+    }
+
+    if (!nickname.trim()) {
+      setMessage("Please enter a nickname.");
+      return;
+    }
+
     setLoading(true);
 
     const { data, error } = await supabase.rpc(
@@ -25,8 +36,8 @@ export default function JoinGame() {
       }
     );
 
-    if (error) {
-      setMessage(error.message);
+    if (error || !data?.player_id || !data?.session_token) {
+      setMessage(error?.message || "Could not join the game. Please try again.");
       setLoading(false);
       return;
     }
@@ -86,7 +97,9 @@ export default function JoinGame() {
         </button>
       </form>
 
-      {message && <p style={{ color: "red" }}>{message}</p>}
+      {message && (
+        <p style={{ color: "red" }}>{message}</p>
+      )}
     </main>
   );
 }
