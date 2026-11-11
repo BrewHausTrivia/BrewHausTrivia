@@ -17,53 +17,26 @@ export default function JoinGame() {
     setMessage("");
     setLoading(true);
 
-    const code = gameCode.trim().toUpperCase();
-    const name = nickname.trim();
+    const { data, error } = await supabase.rpc(
+      "join_trivia_game",
+      {
+        p_game_code: gameCode.trim().toUpperCase(),
+        p_nickname: nickname.trim()
+      }
+    );
 
-    if (!code || !name) {
-      setMessage("Enter both a game code and nickname.");
+    if (error) {
+      setMessage(error.message);
       setLoading(false);
       return;
     }
 
-    const { data: game, error: gameError } = await supabase
-      .from("games")
-      .select("id, status, registration_open")
-      .eq("game_code", code)
-      .maybeSingle();
+    sessionStorage.setItem(
+      "trivia_session_token",
+      data.session_token
+    );
 
-    if (gameError || !game) {
-      setMessage("Game not found. Check the code and try again.");
-      setLoading(false);
-      return;
-    }
-
-    if (game.status !== "waiting" || !game.registration_open) {
-      setMessage("Registration for this game is closed.");
-      setLoading(false);
-      return;
-    }
-
-    const { data: player, error: playerError } = await supabase
-      .from("players")
-      .insert({
-        game_id: game.id,
-        nickname: name
-      })
-      .select("id")
-      .single();
-
-    if (playerError) {
-      setMessage(
-        playerError.code === "23505"
-          ? "That nickname is already being used in this game."
-          : playerError.message
-      );
-      setLoading(false);
-      return;
-    }
-
-    router.push(`/play?player=${player.id}`);
+    router.push(`/play?player=${data.player_id}`);
   }
 
   return (
@@ -81,8 +54,9 @@ export default function JoinGame() {
         <input
           value={gameCode}
           onChange={(event) => setGameCode(event.target.value)}
-          placeholder="Enter 6-character game code"
+          placeholder="Enter game code"
           maxLength={6}
+          required
           style={{
             display: "block",
             width: "100%",
@@ -97,6 +71,7 @@ export default function JoinGame() {
           onChange={(event) => setNickname(event.target.value)}
           placeholder="Choose a nickname"
           maxLength={24}
+          required
           style={{
             display: "block",
             width: "100%",
@@ -106,11 +81,7 @@ export default function JoinGame() {
           }}
         />
 
-        <button
-          type="submit"
-          disabled={loading}
-          style={{ padding: "12px 24px", cursor: "pointer" }}
-        >
+        <button type="submit" disabled={loading}>
           {loading ? "Joining..." : "Join Game"}
         </button>
       </form>
