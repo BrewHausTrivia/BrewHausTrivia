@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -9,6 +8,8 @@ export default function QuestionBank() {
   const router = useRouter();
 
   const [questions, setQuestions] = useState([]);
+  const [game, setGame] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
   const [round, setRound] = useState("1");
   const [prompt, setPrompt] = useState("");
   const [answer, setAnswer] = useState("");
@@ -17,6 +18,7 @@ export default function QuestionBank() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [loadingGame, setLoadingGame] = useState(false);
 
   async function loadQuestions() {
     const { data: { user } } = await supabase.auth.getUser();
@@ -47,6 +49,14 @@ export default function QuestionBank() {
       setMessage(error.message);
     } else {
       setQuestions(data || []);
+    }
+
+    const { data: gameData, error: gameError } = await supabase.rpc(
+      "host_get_latest_game"
+    );
+
+    if (!gameError) {
+      setGame(gameData);
     }
 
     setLoading(false);
@@ -128,53 +138,151 @@ export default function QuestionBank() {
     if (error) {
       setMessage(error.message);
     } else {
+      setSelectedIds((previous) => previous.filter((item) => item !== id));
       setMessage("Question deleted.");
       await loadQuestions();
     }
+  }
+
+  function toggleQuestion(id, roundNumber) {
+    setSelectedIds((previous) => {
+      if (previous.includes(id)) {
+        return previous.filter((item) => item !== id);
+      }
+
+      const roundCount = previous.filter((selectedId) =>
+        questions.some(
+          (q) => q.id === selectedId && q.round_number === roundNumber
+        )
+      ).length;
+
+      if (roundCount >= 10) {
+        return previous;
+      }
+
+      return [...previous, id];
+    });
   }
 
   const roundOne = questions.filter(q => q.round_number === 1);
   const roundTwo = questions.filter(q => q.round_number === 2);
   const roundThree = questions.filter(q => q.round_number === 3);
 
+  const selectedOne = selectedIds.filter(id =>
+    roundOne.some(q => q.id === id)
+  ).length;
+
+  const selectedTwo = selectedIds.filter(id =>
+    roundTwo.some(q => q.id === id)
+  ).length;
+
+  const selectedThree = selectedIds.filter(id =>
+    roundThree.some(q => q.id === id)
+  ).length;
+
+  async function loadSelectedQuestions() {
+    if (
+      selectedOne !== 10 ||
+      selectedTwo !== 10 ||
+      selectedThree !== 10
+    ) {
+      setMessage("Select exactly 10 questions from each round.");
+      return;
+    }
+
+    if (!game || game.status !== "waiting") {
+      setMessage("You need a new waiting game before loading questions.");
+      return;
+    }
+
+    if (!window.confirm("Load these 30 questions into this game?")) {
+      return;
+    }
+
+    setLoadingGame(true);
+    setMessage("");
+
+    const { data, error } = await supabase.rpc(
+      "host_load_question_bank",
+      {
+        p_game_id: game.id,
+        p_question_ids: selectedIds
+      }
+    );
+
+    if (error) {
+      setMessage(error.message);
+    } else {
+      setMessage("Success! 30 questions loaded into your game.");
+      setSelectedIds([]);
+    }
+
+    setLoadingGame(false);
+  }
+
   if (loading) {
     return <main style={{ padding: 30 }}>Loading Question Bank...</main>;
   }
 
-  function renderRound(title, items) {
+  function renderRound(title, items, roundNumber, selectedCount) {
     return (
       <section style={{ marginTop: 30 }}>
         <h2>{title} ({items.length})</h2>
 
+        <p>
+          Selected: {selectedCount} / 10
+        </p>
+
         {items.length === 0 && <p>No saved questions yet.</p>}
 
-        {items.map((question) => (
-          <div key={question.id} style={{
-            border: "1px solid #ccc",
-            borderRadius: 8,
-            padding: 15,
-            marginBottom: 12
-          }}>
-            <strong>{question.prompt}</strong>
-            <p>Correct answer: {question.correct_answer}</p>
-            <p>
-              Accepted variations: {
-                question.accepted_variants.join(", ") || "None"
-              }
-            </p>
+        {items.map((question) => {
+          const isSelected = selectedIds.includes(question.id);
+          const limitReached = selectedCount >= 10;
 
-            <button onClick={() => editQuestion(question)}>
-              Edit
-            </button>
-
-            <button
-              onClick={() => deleteQuestion(question.id)}
-              style={{ marginLeft: 10 }}
+          return (
+            <div
+              key={question.id}
+              style={{
+                border: "1px solid #ccc",
+                borderRadius: 8,
+                padding: 15,
+                marginBottom: 12
+              }}
             >
-              Delete
-            </button>
-          </div>
-        ))}
+              <label style={{ display: "flex", gap: 10 }}>
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  disabled={!isSelected && limitReached}
+                  onChange={() =>
+                    toggleQuestion(question.id, roundNumber)
+                  }
+                />
+
+                <strong>{question.prompt}</strong>
+              </label>
+
+              <p>Correct answer: {question.correct_answer}</p>
+
+              <p>
+                Accepted variations: {
+                  question.accepted_variants.join(", ") || "None"
+                }
+              </p>
+
+              <button onClick={() => editQuestion(question)}>
+                Edit
+              </button>
+
+              <button
+                onClick={() => deleteQuestion(question.id)}
+                style={{ marginLeft: 10 }}
+              >
+                Delete
+              </button>
+            </div>
+          );
+        })}
       </section>
     );
   }
@@ -190,7 +298,9 @@ export default function QuestionBank() {
 
       <p>Total saved questions: {questions.length}</p>
 
-      {message && <p>{message}</p>}
+      {message && (
+        <p style={{ fontWeight: "bold" }}>{message}</p>
+      )}
 
       <section style={{
         border: "2px solid #333",
@@ -201,6 +311,7 @@ export default function QuestionBank() {
 
         <label>Round</label>
         <br />
+
         <select
           value={round}
           onChange={(e) => setRound(e.target.value)}
@@ -214,6 +325,7 @@ export default function QuestionBank() {
 
         <label>Question</label>
         <br />
+
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
@@ -226,6 +338,7 @@ export default function QuestionBank() {
 
         <label>Correct Answer</label>
         <br />
+
         <input
           value={answer}
           onChange={(e) => setAnswer(e.target.value)}
@@ -237,6 +350,7 @@ export default function QuestionBank() {
 
         <label>Accepted Answer Variations</label>
         <br />
+
         <input
           value={variants}
           onChange={(e) => setVariants(e.target.value)}
@@ -244,9 +358,7 @@ export default function QuestionBank() {
           style={{ width: "100%", padding: 10 }}
         />
 
-        <p>
-          Separate accepted variations with commas.
-        </p>
+        <p>Separate accepted variations with commas.</p>
 
         <button onClick={saveQuestion} disabled={saving}>
           {saving ? "Saving..." : editingId ? "Update Question" : "Save Question"}
@@ -259,9 +371,52 @@ export default function QuestionBank() {
         )}
       </section>
 
-      {renderRound("ROUND 1", roundOne)}
-      {renderRound("ROUND 2", roundTwo)}
-      {renderRound("ROUND 3", roundThree)}
+      <hr style={{ marginTop: 35 }} />
+
+      <h2>Select Questions for Your Game</h2>
+
+      <p>
+        Choose 10 questions from each round. You must select 30 total.
+      </p>
+
+      <p>
+        **Total selected: {selectedIds.length} / 30**
+      </p>
+
+      {renderRound("ROUND 1", roundOne, 1, selectedOne)}
+      {renderRound("ROUND 2", roundTwo, 2, selectedTwo)}
+      {renderRound("ROUND 3", roundThree, 3, selectedThree)}
+
+      <section style={{
+        border: "2px solid #333",
+        borderRadius: 10,
+        padding: 20,
+        marginTop: 30
+      }}>
+        <h2>Load Questions Into Game</h2>
+
+        {game?.status === "waiting" ? (
+          <p>Waiting game: {game.game_code}</p>
+        ) : (
+          <p>
+            Your current game is not waiting for questions.
+            Create a new game after the current game is finished.
+          </p>
+        )}
+
+        <button
+          onClick={loadSelectedQuestions}
+          disabled={
+            loadingGame ||
+            selectedOne !== 10 ||
+            selectedTwo !== 10 ||
+            selectedThree !== 10 ||
+            game?.status !== "waiting"
+          }
+        >
+          {loadingGame ? "Loading Questions..." : "Load 30 Selected Questions"}
+        </button>
+      </section>
 
       <hr style={{ marginTop: 35 }} />
 
