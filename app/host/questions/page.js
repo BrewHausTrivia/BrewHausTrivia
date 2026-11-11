@@ -108,13 +108,13 @@ export default function ManageQuestions() {
       </button>
 
       <p>Game code: {game?.game_code}</p>
-      <p>Questions added: {questions.length} / 50</p>
+      <p>Questions added: {questions.length} / 30</p>
 
       <hr />
 
       <h2>Add a Question</h2>
 
-      {questions.length < 50 ? (
+      {questions.length < 30 ? (
         <form onSubmit={addQuestion}>
           <p>Question {questions.length + 1}</p>
           <p>Round {Math.ceil((questions.length + 1) / 10)}</p>
@@ -149,7 +149,7 @@ export default function ManageQuestions() {
           </button>
         </form>
       ) : (
-        <p>All 50 questions have been added!</p>
+        <p>All 30 questions have been added!</p>
       )}
 
       {message && <p>{message}</p>}
