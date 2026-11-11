@@ -59,7 +59,7 @@ export default function ManageQuestions() {
   async function addQuestion(event) {
     event.preventDefault();
 
-    if (!game || questions.length >= 50) return;
+    if (!game || questions.length >= 30) return;
 
     setSaving(true);
     setMessage("");
