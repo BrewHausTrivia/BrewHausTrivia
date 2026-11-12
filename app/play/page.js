@@ -23,39 +23,48 @@ function PlayContent() {
       return;
     }
 
-    let channel;
+    let channel;function updateGame(data) {
+  if (data.game_status === "finished") {
+    router.replace(`/leaderboard?player=${playerId}`);
+    return;
+  }
+
+  const incomingQuestion = data.question || null;
+  const isNewQuestion =
+    currentQuestionId.current !== (incomingQuestion?.id || null);
+
+  setPlayer(data.player);
+  setQuestion(incomingQuestion);
+
+  if (isNewQuestion) {
+    currentQuestionId.current = incomingQuestion?.id || null;
+    setSubmitted(Boolean(incomingQuestion?.has_submitted));
+    setAnswer(incomingQuestion?.submitted_answer || "");
+  } else if (incomingQuestion?.has_submitted) {
+    setSubmitted(true);
+    setAnswer(incomingQuestion.submitted_answer || "");
+  }
+
+  const alreadySubmitted = Boolean(incomingQuestion?.has_submitted);
+
+  if (alreadySubmitted) {
+    setMessage(
+      incomingQuestion.points_awarded === 1
+        ? "Correct! You earned 1 point."
+        : "Answer submitted!"
+    );
+  } else {
+    setMessage(
+      incomingQuestion
+        ? ""
+        : "Waiting for the host to release the next question..."
+    );
+  }
+}
 let pollTimer;
 let stopped = false;
 
-    function updateGame(data) {
-      if (data.game_status === "finished") {
-  router.replace(`/leaderboard?player=${playerId}`);
-  return;
-}
-      setPlayer(data.player);
-      setQuestion(data.question || null);
-
-      const alreadySubmitted = Boolean(data.question?.has_submitted);
-
-      setSubmitted(alreadySubmitted);
-      setAnswer(data.question?.submitted_answer || "");
-
-      if (alreadySubmitted) {
-        setMessage(
-          data.question.points_awarded === 1
-            ? "Correct! You earned 1 point."
-            : "Answer submitted!"
-        );
-      } else {
-        setMessage(
-          data.question
-            ? ""
-            : data.game_status === "finished"
-              ? "This game has ended. Thanks for playing!"
-              : "Waiting for the host to release the next question..."
-        );
-      }
-    }
+    
 
     async function refreshGame(token) {
       const { data, error } = await supabase.rpc(
