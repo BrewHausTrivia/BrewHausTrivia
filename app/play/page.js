@@ -22,7 +22,8 @@ function PlayContent() {
     }
 
     let channel;
-    let stopped = false;
+let pollTimer;
+let stopped = false;
 
     function updateGame(data) {
       setPlayer(data.player);
