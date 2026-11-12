@@ -70,11 +70,7 @@ function PlayContent() {
       const alreadySubmitted = Boolean(incomingQuestion?.has_submitted);
 
       if (alreadySubmitted) {
-        setMessage(
-          incomingQuestion.points_awarded === 1
-            ? "Correct! You earned 1 point."
-            : "Answer submitted!"
-        );
+        setMessage("Answer submitted!");
       } else {
         setMessage(
           incomingQuestion
@@ -259,20 +255,13 @@ function PlayContent() {
       setQuestion((current) => ({
         ...current,
         has_submitted: true,
-        submitted_answer: submittedAnswer,
-        points_awarded: data.points_awarded
+        submitted_answer: submittedAnswer
       }));
 
-      setMessage(
-        data.points_awarded === 1
-          ? "Correct! You earned 1 point."
-          : "Answer submitted! Keep going."
-      );
+      // Every player receives the same confirmation.
+      // Correctness is not shown until the host reveals the answer.
+      setMessage("Answer submitted!");
 
-      setPlayer((current) => ({
-        ...current,
-        total_score: current.total_score + data.points_awarded
-      }));
     } catch (error) {
       setMessage(
         "Something went wrong while submitting. Your answer is still here. Please try again."
@@ -285,6 +274,11 @@ function PlayContent() {
       setSubmitting(false);
     }
   }
+
+  // Hide the score while a submitted answer is awaiting the host's reveal.
+  const hideScore =
+    Boolean(question?.has_submitted) &&
+    !question?.answer_revealed;
 
   return (
     <main
@@ -411,7 +405,7 @@ function PlayContent() {
                     margin: 0
                   }}
                 >
-                  {player.total_score}
+                  {hideScore ? "—" : player.total_score}
                 </h2>
               </div>
             </section>
@@ -521,7 +515,7 @@ function PlayContent() {
                         margin: 0
                       }}
                     >
-                      {message}
+                      Answer submitted!
                     </p>
                   </div>
                 )}
@@ -538,39 +532,40 @@ function PlayContent() {
                   </p>
                 )}
 
-                {question.correct_answer && (
-                  <div
-                    style={{
-                      marginTop: 22,
-                      padding: 18,
-                      background: "#303633",
-                      border: `1px solid ${colors.border}`,
-                      borderRadius: 6
-                    }}
-                  >
-                    <p
+                {question.answer_revealed === true &&
+                  question.correct_answer && (
+                    <div
                       style={{
-                        color: colors.gold,
-                        fontSize: 13,
-                        fontWeight: 700,
-                        letterSpacing: 1,
-                        margin: "0 0 8px"
+                        marginTop: 22,
+                        padding: 18,
+                        background: "#303633",
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 6
                       }}
                     >
-                      CORRECT ANSWER
-                    </p>
+                      <p
+                        style={{
+                          color: colors.gold,
+                          fontSize: 13,
+                          fontWeight: 700,
+                          letterSpacing: 1,
+                          margin: "0 0 8px"
+                        }}
+                      >
+                        CORRECT ANSWER
+                      </p>
 
-                    <p
-                      style={{
-                        fontSize: 20,
-                        fontWeight: 600,
-                        margin: 0
-                      }}
-                    >
-                      {question.correct_answer}
-                    </p>
-                  </div>
-                )}
+                      <p
+                        style={{
+                          fontSize: 20,
+                          fontWeight: 600,
+                          margin: 0
+                        }}
+                      >
+                        {question.correct_answer}
+                      </p>
+                    </div>
+                  )}
               </section>
             ) : (
               <section
