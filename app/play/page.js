@@ -15,6 +15,7 @@ function PlayContent() {
   const [answer, setAnswer] = useState("");
   const [message, setMessage] = useState("Loading game...");
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState("checking");
 
   const currentQuestionId = useRef(null);
@@ -38,6 +39,8 @@ function PlayContent() {
     let channel;
     let pollTimer;
     let stopped = false;
+    let refreshInProgress = false;
+    let sessionToken = null;
 
     function updateGame(data) {
       if (data.game_status === "finished") {
@@ -46,6 +49,7 @@ function PlayContent() {
       }
 
       const incomingQuestion = data.question || null;
+
       const isNewQuestion =
         currentQuestionId.current !== (incomingQuestion?.id || null);
 
@@ -56,9 +60,11 @@ function PlayContent() {
         currentQuestionId.current = incomingQuestion?.id || null;
         setSubmitted(Boolean(incomingQuestion?.has_submitted));
         setAnswer(incomingQuestion?.submitted_answer || "");
+        setSubmitting(false);
       } else if (incomingQuestion?.has_submitted) {
         setSubmitted(true);
         setAnswer(incomingQuestion.submitted_answer || "");
+        setSubmitting(false);
       }
 
       const alreadySubmitted = Boolean(incomingQuestion?.has_submitted);
@@ -79,84 +85,129 @@ function PlayContent() {
     }
 
     async function refreshGame(token) {
-      const { data, error } = await supabase.rpc(
-        "get_player_game",
-        {
-          p_player_id: playerId,
-          p_session_token: token
+      if (stopped || refreshInProgress) return;
+
+      refreshInProgress = true;
+
+      try {
+        const { data, error } = await supabase.rpc(
+          "get_player_game",
+          {
+            p_player_id: playerId,
+            p_session_token: token
+          }
+        );
+
+        if (stopped) return;
+
+        if (error || !data) {
+          setConnectionStatus(
+            navigator.onLine ? "reconnecting" : "offline"
+          );
+          return;
         }
-      );
 
-      if (error || !data || stopped) return;
+        setConnectionStatus("connected");
+        updateGame(data);
 
-      updateGame(data);
+        if (!channel) {
+          channel = supabase
+            .channel(`game-${data.game_id}`)
+            .on(
+              "postgres_changes",
+              {
+                event: "*",
+                schema: "public",
+                table: "games",
+                filter: `id=eq.${data.game_id}`
+              },
+              () => refreshGame(token)
+            )
+            .on(
+              "postgres_changes",
+              {
+                event: "*",
+                schema: "public",
+                table: "questions",
+                filter: `game_id=eq.${data.game_id}`
+              },
+              () => refreshGame(token)
+            )
+            .subscribe();
+        }
+      } catch (error) {
+        if (!stopped) {
+          setConnectionStatus(
+            navigator.onLine ? "reconnecting" : "offline"
+          );
+        }
+      } finally {
+        refreshInProgress = false;
+      }
     }
 
     async function loadGame() {
-      const token = sessionStorage.getItem("trivia_session_token");
+      sessionToken = sessionStorage.getItem("trivia_session_token");
 
-      if (!token) {
+      if (!sessionToken) {
         setMessage("Your player session was not found. Please join again.");
         return;
       }
 
-      const { data, error } = await supabase.rpc(
-        "get_player_game",
-        {
-          p_player_id: playerId,
-          p_session_token: token
-        }
+      setConnectionStatus(
+        navigator.onLine ? "checking" : "offline"
       );
 
-      if (error || !data) {
-        setMessage("Could not load your game. Please join again.");
-        return;
-      }
+      pollTimer = setInterval(() => {
+        refreshGame(sessionToken);
+      }, 2000);
 
-      if (stopped) return;
-
-      updateGame(data);
-
-      channel = supabase
-        .channel(`game-${data.game_id}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "games",
-            filter: `id=eq.${data.game_id}`
-          },
-          () => refreshGame(token)
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "questions",
-            filter: `game_id=eq.${data.game_id}`
-          },
-          () => refreshGame(token)
-        )
-        .subscribe();
-
-      pollTimer = setInterval(() => refreshGame(token), 2000);
+      await refreshGame(sessionToken);
     }
+
+    function handleOnline() {
+      setConnectionStatus("reconnecting");
+
+      if (sessionToken) {
+        refreshGame(sessionToken);
+      }
+    }
+
+    function handleOffline() {
+      setConnectionStatus("offline");
+    }
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
 
     loadGame();
 
     return () => {
       stopped = true;
+
       clearInterval(pollTimer);
-      if (channel) supabase.removeChannel(channel);
+
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [playerId, router]);
 
   async function submitAnswer(event) {
     event.preventDefault();
 
-    if (!question || !player || submitted || !answer.trim()) return;
+    if (
+      !question ||
+      !player ||
+      submitted ||
+      submitting ||
+      !answer.trim()
+    ) {
+      return;
+    }
 
     const token = sessionStorage.getItem("trivia_session_token");
 
@@ -165,42 +216,74 @@ function PlayContent() {
       return;
     }
 
+    const submittedAnswer = answer.trim();
+
+    setSubmitting(true);
     setMessage("Submitting answer...");
 
-    const { data, error } = await supabase.rpc(
-      "submit_trivia_answer",
-      {
-        p_player_id: player.id,
-        p_question_id: question.id,
-        p_answer: answer.trim(),
-        p_session_token: token
+    try {
+      const { data, error } = await supabase.rpc(
+        "submit_trivia_answer",
+        {
+          p_player_id: player.id,
+          p_question_id: question.id,
+          p_answer: submittedAnswer,
+          p_session_token: token
+        }
+      );
+
+      if (error) {
+        setMessage(
+          "We couldn't confirm your answer. Check your connection and try again."
+        );
+
+        setConnectionStatus(
+          navigator.onLine ? "reconnecting" : "offline"
+        );
+
+        setSubmitting(false);
+        return;
       }
-    );
 
-    if (error) {
-      setMessage(error.message);
-      return;
+      if (!data) {
+        setMessage(
+          "We couldn't confirm your answer. Please try again."
+        );
+
+        setSubmitting(false);
+        return;
+      }
+
+      setSubmitted(true);
+
+      setQuestion((current) => ({
+        ...current,
+        has_submitted: true,
+        submitted_answer: submittedAnswer,
+        points_awarded: data.points_awarded
+      }));
+
+      setMessage(
+        data.points_awarded === 1
+          ? "Correct! You earned 1 point."
+          : "Answer submitted! Keep going."
+      );
+
+      setPlayer((current) => ({
+        ...current,
+        total_score: current.total_score + data.points_awarded
+      }));
+    } catch (error) {
+      setMessage(
+        "Something went wrong while submitting. Your answer is still here. Please try again."
+      );
+
+      setConnectionStatus(
+        navigator.onLine ? "reconnecting" : "offline"
+      );
+    } finally {
+      setSubmitting(false);
     }
-
-    setSubmitted(true);
-
-    setQuestion((current) => ({
-      ...current,
-      has_submitted: true,
-      submitted_answer: answer.trim(),
-      points_awarded: data.points_awarded
-    }));
-
-    setMessage(
-      data.points_awarded === 1
-        ? "Correct! You earned 1 point."
-        : "Answer submitted! Keep going."
-    );
-
-    setPlayer((current) => ({
-      ...current,
-      total_score: current.total_score + data.points_awarded
-    }));
   }
 
   return (
@@ -251,6 +334,27 @@ function PlayContent() {
             PUB TRIVIA
           </p>
         </header>
+
+        {connectionStatus !== "connected" && (
+          <div
+            style={{
+              background: "#303633",
+              border: `1px solid ${colors.border}`,
+              borderRadius: 6,
+              padding: "12px 15px",
+              marginBottom: 18,
+              textAlign: "center",
+              color: colors.gold,
+              fontSize: 14
+            }}
+          >
+            {connectionStatus === "offline"
+              ? "No internet connection. We'll reconnect automatically."
+              : connectionStatus === "reconnecting"
+                ? "Connection interrupted. Reconnecting..."
+                : "Connecting to your game..."}
+          </div>
+        )}
 
         {player && (
           <>
@@ -353,7 +457,7 @@ function PlayContent() {
                     value={answer}
                     onChange={(event) => setAnswer(event.target.value)}
                     placeholder="Type your answer here"
-                    disabled={submitted}
+                    disabled={submitted || submitting}
                     style={{
                       width: "100%",
                       boxSizing: "border-box",
@@ -370,16 +474,16 @@ function PlayContent() {
 
                   <button
                     type="submit"
-                    disabled={submitted || !answer.trim()}
+                    disabled={submitted || submitting || !answer.trim()}
                     style={{
                       width: "100%",
                       padding: "16px",
                       background:
-                        submitted || !answer.trim()
+                        submitted || submitting || !answer.trim()
                           ? "#55534D"
                           : colors.gold,
                       color:
-                        submitted || !answer.trim()
+                        submitted || submitting || !answer.trim()
                           ? "#D0CCC3"
                           : "#191919",
                       border: "none",
@@ -387,12 +491,16 @@ function PlayContent() {
                       fontSize: 17,
                       fontWeight: 700,
                       cursor:
-                        submitted || !answer.trim()
+                        submitted || submitting || !answer.trim()
                           ? "not-allowed"
                           : "pointer"
                     }}
                   >
-                    {submitted ? "ANSWER SUBMITTED" : "SUBMIT ANSWER"}
+                    {submitted
+                      ? "ANSWER SUBMITTED"
+                      : submitting
+                        ? "SUBMITTING..."
+                        : "SUBMIT ANSWER"}
                   </button>
                 </form>
 
@@ -416,6 +524,18 @@ function PlayContent() {
                       {message}
                     </p>
                   </div>
+                )}
+
+                {!submitted && message && (
+                  <p
+                    style={{
+                      color: colors.muted,
+                      fontSize: 14,
+                      marginTop: 15
+                    }}
+                  >
+                    {message}
+                  </p>
                 )}
 
                 {question.correct_answer && (
