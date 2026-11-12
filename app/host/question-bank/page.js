@@ -116,10 +116,9 @@ export default function QuestionBank() {
     loadQuestions();
   }, []);
 
+  // Clear only the question fields.
+  // Keep round, category, and subcategory selected.
   function clearForm() {
-    setRound("1");
-    setCategory("General");
-    setSubcategory("General");
     setPrompt("");
     setAnswer("");
     setVariants("");
