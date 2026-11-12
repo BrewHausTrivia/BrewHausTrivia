@@ -121,9 +121,10 @@ console.log("PLAYER GAME ERROR:", error);
     loadGame();
 
     return () => {
-      stopped = true;
-      if (channel) supabase.removeChannel(channel);
-    };
+  stopped = true;
+  clearInterval(pollTimer);
+  if (channel) supabase.removeChannel(channel);
+};
   }, [playerId]);
 
   async function submitAnswer(event) {
