@@ -114,6 +114,7 @@ console.log("PLAYER GAME ERROR:", error);
           () => refreshGame(token)
         )
         .subscribe();
+      pollTimer = setInterval(() => refreshGame(token), 2000);
     }
 
     loadGame();
