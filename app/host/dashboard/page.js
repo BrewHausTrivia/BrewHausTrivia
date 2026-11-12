@@ -11,6 +11,8 @@ export default function Dashboard() {
   const [role, setRole] = useState("");
   const [game, setGame] = useState(null);
   const [questions, setQuestions] = useState([]);
+  const [savedQuestions, setSavedQuestions] = useState([]);
+  const [savedQuestionError, setSavedQuestionError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [creatingGame, setCreatingGame] = useState(false);
@@ -85,6 +87,7 @@ export default function Dashboard() {
 
       setRole(roleData.role);
 
+      // Load the current game.
       const { data: gameData, error: gameError } = await supabase.rpc(
         "host_get_latest_game"
       );
@@ -100,6 +103,7 @@ export default function Dashboard() {
 
       let questionData = [];
 
+      // Load questions already added to the current game.
       if (gameData) {
         const { data, error: questionError } = await supabase.rpc(
           "host_get_questions",
@@ -112,12 +116,29 @@ export default function Dashboard() {
 
         if (questionError) {
           setConnectionStatus("reconnecting");
-          setMessage("Unable to load questions. Retrying automatically...");
+          setMessage("Unable to load game questions. Retrying automatically...");
           setLoading(false);
           return;
         }
 
         questionData = data || [];
+      }
+
+      // NEW: Load reusable questions from the Question Bank.
+      const { data: bankData, error: bankError } = await supabase
+        .from("question_bank")
+        .select("id, round_number, prompt, correct_answer, accepted_variants")
+        .order("round_number")
+        .order("created_at");
+
+      if (!mounted.current) return;
+
+      if (bankError) {
+        setSavedQuestionError(bankError.message);
+        setSavedQuestions([]);
+      } else {
+        setSavedQuestionError("");
+        setSavedQuestions(bankData || []);
       }
 
       setGame(gameData);
@@ -154,7 +175,7 @@ export default function Dashboard() {
 
     function handleOnline() {
       setConnectionStatus("reconnecting");
-      setMessage("Internet connection restored. Refreshing game...");
+      setMessage("Internet connection restored. Refreshing dashboard...");
       loadDashboard();
     }
 
@@ -204,7 +225,6 @@ export default function Dashboard() {
       }
 
       setMessage("New game created!");
-
       await loadDashboard();
     } catch (error) {
       setMessage(
@@ -296,6 +316,18 @@ export default function Dashboard() {
 
   const busy = Boolean(actionInProgress) || creatingGame;
 
+  const savedRoundOne = savedQuestions.filter(
+    (question) => question.round_number === 1
+  );
+
+  const savedRoundTwo = savedQuestions.filter(
+    (question) => question.round_number === 2
+  );
+
+  const savedRoundThree = savedQuestions.filter(
+    (question) => question.round_number === 3
+  );
+
   if (loading) {
     return (
       <main style={styles.page}>
@@ -304,9 +336,7 @@ export default function Dashboard() {
             BREWHAUS<span style={styles.gold}>TRIVIA</span>
           </h1>
 
-          <p style={styles.muted}>
-            Loading dashboard...
-          </p>
+          <p style={styles.muted}>Loading dashboard...</p>
 
           {connectionStatus !== "connected" && (
             <p style={{ color: colors.gold }}>
@@ -325,6 +355,39 @@ export default function Dashboard() {
       question.question_number === game?.current_question &&
       question.is_released
   );
+
+  function renderSavedRound(title, items) {
+    return (
+      <div style={styles.savedRound}>
+        <div style={styles.savedRoundHeader}>
+          <h3 style={styles.savedRoundTitle}>{title}</h3>
+          <span style={styles.questionCount}>
+            {items.length} SAVED
+          </span>
+        </div>
+
+        {items.length === 0 ? (
+          <p style={styles.muted}>No saved questions in this round.</p>
+        ) : (
+          items.map((question) => (
+            <div key={question.id} style={styles.savedQuestion}>
+              <p style={styles.prompt}>{question.prompt}</p>
+
+              <p style={styles.savedAnswer}>
+                Answer: {question.correct_answer}
+              </p>
+
+              {question.accepted_variants?.length > 0 && (
+                <p style={styles.savedAnswer}>
+                  Accepted variations: {question.accepted_variants.join(", ")}
+                </p>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    );
+  }
 
   return (
     <main style={styles.page}>
@@ -352,9 +415,7 @@ export default function Dashboard() {
         )}
 
         {message && (
-          <div style={styles.message}>
-            {message}
-          </div>
+          <div style={styles.message}>{message}</div>
         )}
 
         {!game ? (
@@ -399,9 +460,7 @@ export default function Dashboard() {
 
               <p style={styles.muted}>GAME CODE</p>
 
-              <h1 style={styles.gameCode}>
-                {game.game_code}
-              </h1>
+              <h1 style={styles.gameCode}>{game.game_code}</h1>
 
               <div style={styles.details}>
                 <div>
@@ -516,7 +575,7 @@ export default function Dashboard() {
 
             <section>
               <div style={styles.questionsHeader}>
-                <h2 style={styles.sectionTitle}>Questions</h2>
+                <h2 style={styles.sectionTitle}>Current Game Questions</h2>
 
                 <span style={styles.questionCount}>
                   {questions.length} QUESTIONS
@@ -542,15 +601,11 @@ export default function Dashboard() {
                     </h3>
 
                     {question.is_released && (
-                      <span style={styles.released}>
-                        RELEASED
-                      </span>
+                      <span style={styles.released}>RELEASED</span>
                     )}
                   </div>
 
-                  <p style={styles.prompt}>
-                    {question.prompt}
-                  </p>
+                  <p style={styles.prompt}>{question.prompt}</p>
 
                   {question.is_released ? (
                     <p style={{ color: colors.green, fontSize: 13 }}>
@@ -575,6 +630,42 @@ export default function Dashboard() {
             </section>
           </>
         )}
+
+        {/* NEW: Saved Question Bank */}
+        <section style={{ marginTop: 35 }}>
+          <div style={styles.questionsHeader}>
+            <h2 style={styles.sectionTitle}>Saved Question Bank</h2>
+
+            <span style={styles.questionCount}>
+              {savedQuestions.length} SAVED QUESTIONS
+            </span>
+          </div>
+
+          {savedQuestionError ? (
+            <div style={panelStyle}>
+              <p style={{ color: colors.red }}>
+                Unable to load saved questions: {savedQuestionError}
+              </p>
+            </div>
+          ) : savedQuestions.length === 0 ? (
+            <div style={panelStyle}>
+              <p style={styles.muted}>
+                No saved questions found in your Question Bank.
+              </p>
+            </div>
+          ) : (
+            <div style={panelStyle}>
+              <p style={styles.muted}>
+                These are your reusable questions saved in the Question Bank.
+                They are separate from the questions loaded into your current game.
+              </p>
+
+              {renderSavedRound("ROUND 1", savedRoundOne)}
+              {renderSavedRound("ROUND 2", savedRoundTwo)}
+              {renderSavedRound("ROUND 3", savedRoundThree)}
+            </div>
+          )}
+        </section>
 
         <footer style={styles.footer}>
           <button
@@ -764,6 +855,35 @@ const styles = {
     fontSize: 17,
     lineHeight: 1.5,
     margin: "15px 0"
+  },
+  savedRound: {
+    marginTop: 24,
+    paddingTop: 15,
+    borderTop: "1px solid #3A3D3F"
+  },
+  savedRoundHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 10
+  },
+  savedRoundTitle: {
+    color: "#B79A62",
+    fontSize: 15,
+    letterSpacing: 1
+  },
+  savedQuestion: {
+    padding: "12px 15px",
+    marginBottom: 10,
+    background: "#1D2022",
+    border: "1px solid #3A3D3F",
+    borderRadius: 6
+  },
+  savedAnswer: {
+    color: "#A7A7A2",
+    fontSize: 13,
+    lineHeight: 1.5
   },
   footer: {
     borderTop: "1px solid #3A3D3F",
