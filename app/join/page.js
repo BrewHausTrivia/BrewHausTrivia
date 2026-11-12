@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
@@ -11,6 +11,14 @@ export default function JoinGame() {
   const [nickname, setNickname] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get("code");
+
+  if (code) {
+    setGameCode(code.toUpperCase());
+  }
+}, []);
 
   async function joinGame(event) {
     event.preventDefault();
