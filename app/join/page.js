@@ -7,10 +7,12 @@ import { supabase } from "../../lib/supabase";
 
 export default function JoinGame() {
   const router = useRouter();
+
   const [gameCode, setGameCode] = useState("");
   const [nickname, setNickname] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -19,11 +21,40 @@ export default function JoinGame() {
     if (code) {
       setGameCode(code.toUpperCase());
     }
+
+    setIsOnline(navigator.onLine);
+
+    function handleOnline() {
+      setIsOnline(true);
+      setMessage("");
+    }
+
+    function handleOffline() {
+      setIsOnline(false);
+      setMessage("You are offline. Please reconnect to join the game.");
+    }
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
   }, []);
 
   async function joinGame(event) {
     event.preventDefault();
+
+    if (loading) return;
+
     setMessage("");
+
+    if (!navigator.onLine) {
+      setIsOnline(false);
+      setMessage("You are offline. Please reconnect and try again.");
+      return;
+    }
 
     if (gameCode.trim().length !== 6) {
       setMessage("Please enter the 6-character game code.");
@@ -37,28 +68,62 @@ export default function JoinGame() {
 
     setLoading(true);
 
-    const { data, error } = await supabase.rpc(
-      "join_trivia_game",
-      {
-        p_game_code: gameCode.trim().toUpperCase(),
-        p_nickname: nickname.trim()
-      }
-    );
-
-    if (error || !data?.player_id || !data?.session_token) {
-      setMessage(
-        error?.message || "Could not join the game. Please try again."
+    try {
+      const { data, error } = await supabase.rpc(
+        "join_trivia_game",
+        {
+          p_game_code: gameCode.trim().toUpperCase(),
+          p_nickname: nickname.trim()
+        }
       );
+
+      if (error) {
+        const errorText = (error.message || "").toLowerCase();
+
+        if (
+          errorText.includes("invalid") ||
+          errorText.includes("not found") ||
+          errorText.includes("does not exist")
+        ) {
+          setMessage("That game code is not valid. Please check it and try again.");
+        } else if (
+          errorText.includes("registration") ||
+          errorText.includes("closed")
+        ) {
+          setMessage("Registration for this game is closed.");
+        } else if (
+          errorText.includes("full") ||
+          errorText.includes("maximum")
+        ) {
+          setMessage("This game has reached its player limit.");
+        } else {
+          setMessage("We couldn't join you to the game. Please try again.");
+        }
+
+        return;
+      }
+
+      if (!data?.player_id || !data?.session_token) {
+        setMessage("We couldn't complete your registration. Please try again.");
+        return;
+      }
+
+      sessionStorage.setItem(
+        "trivia_session_token",
+        data.session_token
+      );
+
+      router.push(`/play?player=${data.player_id}`);
+    } catch (error) {
+      if (!navigator.onLine) {
+        setIsOnline(false);
+        setMessage("Your connection was lost. Please reconnect and try again.");
+      } else {
+        setMessage("Something went wrong while joining. Please try again.");
+      }
+    } finally {
       setLoading(false);
-      return;
     }
-
-    sessionStorage.setItem(
-      "trivia_session_token",
-      data.session_token
-    );
-
-    router.push(`/play?player=${data.player_id}`);
   }
 
   return (
@@ -205,6 +270,7 @@ export default function JoinGame() {
 
           {message && (
             <p
+              role="alert"
               style={{
                 color: "#E2A09A",
                 fontSize: 14,
@@ -213,6 +279,18 @@ export default function JoinGame() {
               }}
             >
               {message}
+            </p>
+          )}
+
+          {!isOnline && !message && (
+            <p
+              style={{
+                color: "#E2A09A",
+                fontSize: 14,
+                marginTop: 18
+              }}
+            >
+              Waiting for your internet connection...
             </p>
           )}
         </div>
