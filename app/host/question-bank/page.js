@@ -1,8 +1,49 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
+
+const CATEGORY_OPTIONS = {
+  General: ["General"],
+  Sports: [
+    "Basketball",
+    "Football",
+    "Baseball",
+    "Hockey",
+    "Olympics",
+    "Athletes & Sports History",
+    "Other Sports"
+  ],
+  Geography: [
+    "Countries & Capitals",
+    "Oceans & Rivers",
+    "Landmarks",
+    "United States Geography",
+    "World Geography"
+  ],
+  "2000s Pop Culture": [
+    "Movies",
+    "Television",
+    "Music",
+    "Celebrities",
+    "2000s Events & Trends"
+  ],
+  History: [
+    "American History",
+    "World History",
+    "Historical Figures",
+    "Wars & Major Events",
+    "Inventions & Discoveries"
+  ],
+  Country: [
+    "Country Singers & Bands",
+    "Country Songs & Albums",
+    "Country Music History",
+    "Country Living & Culture"
+  ]
+};
 
 export default function QuestionBank() {
   const router = useRouter();
@@ -10,10 +51,18 @@ export default function QuestionBank() {
   const [questions, setQuestions] = useState([]);
   const [game, setGame] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
+
   const [round, setRound] = useState("1");
+  const [category, setCategory] = useState("General");
+  const [subcategory, setSubcategory] = useState("General");
+
+  const [filterCategory, setFilterCategory] = useState("All");
+  const [filterSubcategory, setFilterSubcategory] = useState("All");
+
   const [prompt, setPrompt] = useState("");
   const [answer, setAnswer] = useState("");
   const [variants, setVariants] = useState("");
+
   const [editingId, setEditingId] = useState(null);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -21,7 +70,9 @@ export default function QuestionBank() {
   const [loadingGame, setLoadingGame] = useState(false);
 
   async function loadQuestions() {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
 
     if (!user) {
       router.replace("/host");
@@ -51,9 +102,8 @@ export default function QuestionBank() {
       setQuestions(data || []);
     }
 
-    const { data: gameData, error: gameError } = await supabase.rpc(
-      "host_get_latest_game"
-    );
+    const { data: gameData, error: gameError } =
+      await supabase.rpc("host_get_latest_game");
 
     if (!gameError) {
       setGame(gameData);
@@ -68,6 +118,8 @@ export default function QuestionBank() {
 
   function clearForm() {
     setRound("1");
+    setCategory("General");
+    setSubcategory("General");
     setPrompt("");
     setAnswer("");
     setVariants("");
@@ -85,6 +137,8 @@ export default function QuestionBank() {
 
     const questionData = {
       round_number: Number(round),
+      category,
+      subcategory,
       prompt: prompt.trim(),
       correct_answer: answer.trim(),
       accepted_variants: variants
@@ -118,12 +172,23 @@ export default function QuestionBank() {
   }
 
   function editQuestion(question) {
+    const savedCategory = question.category || "General";
+    const availableSubcategories =
+      CATEGORY_OPTIONS[savedCategory] || ["General"];
+
     setEditingId(question.id);
     setRound(String(question.round_number));
+    setCategory(savedCategory);
+    setSubcategory(
+      availableSubcategories.includes(question.subcategory)
+        ? question.subcategory
+        : availableSubcategories[0]
+    );
     setPrompt(question.prompt);
     setAnswer(question.correct_answer);
-    setVariants(question.accepted_variants.join(", "));
+    setVariants((question.accepted_variants || []).join(", "));
     setMessage("");
+
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -138,7 +203,9 @@ export default function QuestionBank() {
     if (error) {
       setMessage(error.message);
     } else {
-      setSelectedIds((previous) => previous.filter((item) => item !== id));
+      setSelectedIds((previous) =>
+        previous.filter((item) => item !== id)
+      );
       setMessage("Question deleted.");
       await loadQuestions();
     }
@@ -152,7 +219,8 @@ export default function QuestionBank() {
 
       const roundCount = previous.filter((selectedId) =>
         questions.some(
-          (q) => q.id === selectedId && q.round_number === roundNumber
+          (q) => q.id === selectedId &&
+            q.round_number === roundNumber
         )
       ).length;
 
@@ -164,21 +232,53 @@ export default function QuestionBank() {
     });
   }
 
-  const roundOne = questions.filter(q => q.round_number === 1);
-  const roundTwo = questions.filter(q => q.round_number === 2);
-  const roundThree = questions.filter(q => q.round_number === 3);
+  const roundOne = questions.filter(
+    (q) => q.round_number === 1
+  );
 
-  const selectedOne = selectedIds.filter(id =>
-    roundOne.some(q => q.id === id)
+  const roundTwo = questions.filter(
+    (q) => q.round_number === 2
+  );
+
+  const roundThree = questions.filter(
+    (q) => q.round_number === 3
+  );
+
+  const selectedOne = selectedIds.filter((id) =>
+    roundOne.some((q) => q.id === id)
   ).length;
 
-  const selectedTwo = selectedIds.filter(id =>
-    roundTwo.some(q => q.id === id)
+  const selectedTwo = selectedIds.filter((id) =>
+    roundTwo.some((q) => q.id === id)
   ).length;
 
-  const selectedThree = selectedIds.filter(id =>
-    roundThree.some(q => q.id === id)
+  const selectedThree = selectedIds.filter((id) =>
+    roundThree.some((q) => q.id === id)
   ).length;
+
+  const filteredQuestions = questions.filter((question) => {
+    const matchesCategory =
+      filterCategory === "All" ||
+      (question.category || "General") === filterCategory;
+
+    const matchesSubcategory =
+      filterSubcategory === "All" ||
+      (question.subcategory || "General") === filterSubcategory;
+
+    return matchesCategory && matchesSubcategory;
+  });
+
+  const filteredRoundOne = filteredQuestions.filter(
+    (q) => q.round_number === 1
+  );
+
+  const filteredRoundTwo = filteredQuestions.filter(
+    (q) => q.round_number === 2
+  );
+
+  const filteredRoundThree = filteredQuestions.filter(
+    (q) => q.round_number === 3
+  );
 
   async function loadSelectedQuestions() {
     if (
@@ -191,7 +291,9 @@ export default function QuestionBank() {
     }
 
     if (!game || game.status !== "waiting") {
-      setMessage("You need a new waiting game before loading questions.");
+      setMessage(
+        "You need a new waiting game before loading questions."
+      );
       return;
     }
 
@@ -202,7 +304,7 @@ export default function QuestionBank() {
     setLoadingGame(true);
     setMessage("");
 
-    const { data, error } = await supabase.rpc(
+    const { error } = await supabase.rpc(
       "host_load_question_bank",
       {
         p_game_id: game.id,
@@ -221,7 +323,11 @@ export default function QuestionBank() {
   }
 
   if (loading) {
-    return <main style={{ padding: 30 }}>Loading Question Bank...</main>;
+    return (
+      <main style={{ padding: 30 }}>
+        Loading Question Bank...
+      </main>
+    );
   }
 
   function renderRound(title, items, roundNumber, selectedCount) {
@@ -229,11 +335,11 @@ export default function QuestionBank() {
       <section style={{ marginTop: 30 }}>
         <h2>{title} ({items.length})</h2>
 
-        <p>
-          Selected: {selectedCount} / 10
-        </p>
+        <p>Selected: {selectedCount} / 10</p>
 
-        {items.length === 0 && <p>No saved questions yet.</p>}
+        {items.length === 0 && (
+          <p>No questions match this filter.</p>
+        )}
 
         {items.map((question) => {
           const isSelected = selectedIds.includes(question.id);
@@ -243,13 +349,21 @@ export default function QuestionBank() {
             <div
               key={question.id}
               style={{
-                border: "1px solid #ccc",
+                background: "#242729",
+                color: "#F1EBDD",
+                border: "1px solid #3A3D3F",
                 borderRadius: 8,
                 padding: 15,
                 marginBottom: 12
               }}
             >
-              <label style={{ display: "flex", gap: 10 }}>
+              <label
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  alignItems: "flex-start"
+                }}
+              >
                 <input
                   type="checkbox"
                   checked={isSelected}
@@ -262,12 +376,24 @@ export default function QuestionBank() {
                 <strong>{question.prompt}</strong>
               </label>
 
-              <p>Correct answer: {question.correct_answer}</p>
+              <p>
+                <strong>Category:</strong>{" "}
+                {question.category || "General"}
+              </p>
 
               <p>
-                Accepted variations: {
-                  question.accepted_variants.join(", ") || "None"
-                }
+                <strong>Subcategory:</strong>{" "}
+                {question.subcategory || "General"}
+              </p>
+
+              <p>
+                <strong>Correct answer:</strong>{" "}
+                {question.correct_answer}
+              </p>
+
+              <p>
+                <strong>Accepted variations:</strong>{" "}
+                {(question.accepted_variants || []).join(", ") || "None"}
               </p>
 
               <button onClick={() => editQuestion(question)}>
@@ -288,25 +414,37 @@ export default function QuestionBank() {
   }
 
   return (
-    <main style={{
-      maxWidth: 850,
-      margin: "40px auto",
-      padding: 24,
-      fontFamily: "Arial, sans-serif"
-    }}>
-      <h1>BrewHausTrivia Question Bank</h1>
+    <main
+      style={{
+        maxWidth: 850,
+        margin: "40px auto",
+        padding: 24,
+        fontFamily: "Arial, sans-serif",
+        background: "#17191B",
+        color: "#F1EBDD",
+        minHeight: "100vh"
+      }}
+    >
+      <h1 style={{ color: "#B79A62" }}>
+        BrewHausTrivia Question Bank
+      </h1>
 
       <p>Total saved questions: {questions.length}</p>
 
       {message && (
-        <p style={{ fontWeight: "bold" }}>{message}</p>
+        <p style={{ fontWeight: "bold", color: "#B79A62" }}>
+          {message}
+        </p>
       )}
 
-      <section style={{
-        border: "2px solid #333",
-        borderRadius: 10,
-        padding: 20
-      }}>
+      <section
+        style={{
+          background: "#242729",
+          border: "1px solid #3A3D3F",
+          borderRadius: 10,
+          padding: 20
+        }}
+      >
         <h2>{editingId ? "Edit Question" : "Add a Question"}</h2>
 
         <label>Round</label>
@@ -319,6 +457,42 @@ export default function QuestionBank() {
           <option value="1">Round 1</option>
           <option value="2">Round 2</option>
           <option value="3">Round 3</option>
+        </select>
+
+        <br /><br />
+
+        <label>Category</label>
+        <br />
+
+        <select
+          value={category}
+          onChange={(e) => {
+            const nextCategory = e.target.value;
+            setCategory(nextCategory);
+            setSubcategory(CATEGORY_OPTIONS[nextCategory][0]);
+          }}
+        >
+          {Object.keys(CATEGORY_OPTIONS).map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
+        </select>
+
+        <br /><br />
+
+        <label>Subcategory</label>
+        <br />
+
+        <select
+          value={subcategory}
+          onChange={(e) => setSubcategory(e.target.value)}
+        >
+          {(CATEGORY_OPTIONS[category] || ["General"]).map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
         </select>
 
         <br /><br />
@@ -354,24 +528,86 @@ export default function QuestionBank() {
         <input
           value={variants}
           onChange={(e) => setVariants(e.target.value)}
-          placeholder="Example: the USA, United States"
+          placeholder="Example: USA, United States, America"
           style={{ width: "100%", padding: 10 }}
         />
 
-        <p>Separate accepted variations with commas.</p>
+        <p>
+          Separate accepted variations with commas.
+          Capitalization and punctuation are handled automatically.
+        </p>
 
         <button onClick={saveQuestion} disabled={saving}>
-          {saving ? "Saving..." : editingId ? "Update Question" : "Save Question"}
+          {saving
+            ? "Saving..."
+            : editingId
+              ? "Update Question"
+              : "Save Question"}
         </button>
 
         {editingId && (
-          <button onClick={clearForm} style={{ marginLeft: 10 }}>
+          <button
+            onClick={clearForm}
+            style={{ marginLeft: 10 }}
+          >
             Cancel Edit
           </button>
         )}
       </section>
 
       <hr style={{ marginTop: 35 }} />
+
+      <h2>Find Questions</h2>
+
+      <p>Filter your saved questions by category.</p>
+
+      <label>Category Filter</label>
+      <br />
+
+      <select
+        value={filterCategory}
+        onChange={(e) => {
+          setFilterCategory(e.target.value);
+          setFilterSubcategory("All");
+        }}
+      >
+        <option value="All">All Categories</option>
+
+        {Object.keys(CATEGORY_OPTIONS).map((item) => (
+          <option key={item} value={item}>
+            {item}
+          </option>
+        ))}
+      </select>
+
+      <br /><br />
+
+      <label>Subcategory Filter</label>
+      <br />
+
+      <select
+        value={filterSubcategory}
+        onChange={(e) => setFilterSubcategory(e.target.value)}
+      >
+        <option value="All">All Subcategories</option>
+
+        {(filterCategory === "All"
+          ? [...new Set(
+              questions.map((q) => q.subcategory || "General")
+            )]
+          : CATEGORY_OPTIONS[filterCategory] || ["General"]
+        ).map((item) => (
+          <option key={item} value={item}>
+            {item}
+          </option>
+        ))}
+      </select>
+
+      <p>
+        Showing {filteredQuestions.length} of {questions.length} questions.
+      </p>
+
+      <hr style={{ marginTop: 30 }} />
 
       <h2>Select Questions for Your Game</h2>
 
@@ -380,19 +616,39 @@ export default function QuestionBank() {
       </p>
 
       <p>
-        **Total selected: {selectedIds.length} / 30**
+        <strong>Total selected: {selectedIds.length} / 30</strong>
       </p>
 
-      {renderRound("ROUND 1", roundOne, 1, selectedOne)}
-      {renderRound("ROUND 2", roundTwo, 2, selectedTwo)}
-      {renderRound("ROUND 3", roundThree, 3, selectedThree)}
+      {renderRound(
+        "ROUND 1",
+        filteredRoundOne,
+        1,
+        selectedOne
+      )}
 
-      <section style={{
-        border: "2px solid #333",
-        borderRadius: 10,
-        padding: 20,
-        marginTop: 30
-      }}>
+      {renderRound(
+        "ROUND 2",
+        filteredRoundTwo,
+        2,
+        selectedTwo
+      )}
+
+      {renderRound(
+        "ROUND 3",
+        filteredRoundThree,
+        3,
+        selectedThree
+      )}
+
+      <section
+        style={{
+          border: "2px solid #B79A62",
+          borderRadius: 10,
+          padding: 20,
+          marginTop: 30,
+          background: "#242729"
+        }}
+      >
         <h2>Load Questions Into Game</h2>
 
         {game?.status === "waiting" ? (
@@ -414,7 +670,9 @@ export default function QuestionBank() {
             game?.status !== "waiting"
           }
         >
-          {loadingGame ? "Loading Questions..." : "Load 30 Selected Questions"}
+          {loadingGame
+            ? "Loading Questions..."
+            : "Load 30 Selected Questions"}
         </button>
       </section>
 
