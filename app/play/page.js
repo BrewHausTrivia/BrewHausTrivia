@@ -130,7 +130,7 @@ console.log("PLAYER GAME ERROR:", error);
   clearInterval(pollTimer);
   if (channel) supabase.removeChannel(channel);
 };
-  }, [playerId]);
+  }, [playerId, router]);
 
   async function submitAnswer(event) {
     event.preventDefault();
