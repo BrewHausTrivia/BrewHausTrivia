@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "../../lib/supabase";
 
 export default function TVLeaderboard() {
@@ -12,8 +13,11 @@ export default function TVLeaderboard() {
   const [players, setPlayers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [siteUrl, setSiteUrl] = useState("");
 
   useEffect(() => {
+    setSiteUrl(window.location.origin);
+
     let active = true;
 
     async function loadLeaderboard() {
@@ -97,6 +101,10 @@ export default function TVLeaderboard() {
     );
   }
 
+  const joinUrl = game && siteUrl
+    ? `${siteUrl}/join?code=${game.game_code}`
+    : "";
+
   return (
     <main style={styles.page}>
       <h1 style={styles.title}>BREWHAUSTRIVIA</h1>
@@ -106,9 +114,31 @@ export default function TVLeaderboard() {
 
       {game && (
         <>
-          <p style={styles.gameCode}>
-            GAME CODE: {game.game_code}
-          </p>
+          <div style={styles.joinSection}>
+            <div>
+              <p style={styles.gameCode}>
+                GAME CODE: {game.game_code}
+              </p>
+              <p style={styles.scanText}>
+                SCAN TO JOIN THE GAME
+              </p>
+            </div>
+
+            {joinUrl && (
+              <div style={styles.qrCard}>
+                <QRCodeSVG
+                  value={joinUrl}
+                  size={180}
+                  level="H"
+                  bgColor="#ffffff"
+                  fgColor="#101010"
+                />
+                <p style={styles.qrCaption}>
+                  SCAN WITH YOUR PHONE
+                </p>
+              </div>
+            )}
+          </div>
 
           <h2 style={styles.heading}>LIVE LEADERBOARD</h2>
 
@@ -160,7 +190,7 @@ const styles = {
     minHeight: "100vh",
     background: "#101010",
     color: "white",
-    padding: "40px 20px",
+    padding: "30px 20px",
     textAlign: "center",
     fontFamily: "Arial, sans-serif"
   },
@@ -175,15 +205,39 @@ const styles = {
     letterSpacing: "5px",
     fontSize: "clamp(12px, 2vw, 18px)"
   },
+  joinSection: {
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: "40px",
+    flexWrap: "wrap",
+    marginTop: "25px"
+  },
   gameCode: {
     color: "#D6A84B",
-    fontSize: "22px",
+    fontSize: "24px",
+    fontWeight: "bold"
+  },
+  scanText: {
+    color: "white",
+    fontSize: "20px",
+    fontWeight: "bold"
+  },
+  qrCard: {
+    background: "white",
+    padding: "14px",
+    borderRadius: "12px",
+    display: "inline-block"
+  },
+  qrCaption: {
+    color: "#101010",
+    fontSize: "12px",
     fontWeight: "bold",
-    marginTop: "35px"
+    marginBottom: "0"
   },
   heading: {
     fontSize: "clamp(28px, 4vw, 44px)",
-    marginTop: "35px",
+    marginTop: "30px",
     marginBottom: "25px"
   },
   list: {
