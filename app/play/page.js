@@ -27,6 +27,10 @@ let pollTimer;
 let stopped = false;
 
     function updateGame(data) {
+      if (data.game_status === "finished") {
+  router.replace(`/leaderboard?player=${playerId}`);
+  return;
+}
       setPlayer(data.player);
       setQuestion(data.question || null);
 
