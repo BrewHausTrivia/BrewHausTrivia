@@ -2,11 +2,12 @@
 "use client";
 
 import { useEffect, useState, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
 function PlayContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const playerId = searchParams.get("player");
 
   const [player, setPlayer] = useState(null);
