@@ -16,7 +16,7 @@ export default function TVLeaderboard() {
   const [siteUrl, setSiteUrl] = useState("");
 
   useEffect(() => {
-    setSiteUrl(window.location.origin);
+    setSiteUrl("https://brewhaustrivia.vercel.app");
 
     let active = true;
 
