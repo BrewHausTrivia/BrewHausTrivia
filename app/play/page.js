@@ -15,7 +15,18 @@ function PlayContent() {
   const [answer, setAnswer] = useState("");
   const [message, setMessage] = useState("Loading game...");
   const [submitted, setSubmitted] = useState(false);
+
   const currentQuestionId = useRef(null);
+
+  const colors = {
+    background: "#17191B",
+    panel: "#242729",
+    border: "#3A3D3F",
+    gold: "#B79A62",
+    cream: "#F1EBDD",
+    muted: "#A7A7A2",
+    green: "#6F9B78"
+  };
 
   useEffect(() => {
     if (!playerId) {
@@ -23,48 +34,48 @@ function PlayContent() {
       return;
     }
 
-    let channel;function updateGame(data) {
-  if (data.game_status === "finished") {
-    router.replace(`/leaderboard?player=${playerId}`);
-    return;
-  }
+    let channel;
+    let pollTimer;
+    let stopped = false;
 
-  const incomingQuestion = data.question || null;
-  const isNewQuestion =
-    currentQuestionId.current !== (incomingQuestion?.id || null);
+    function updateGame(data) {
+      if (data.game_status === "finished") {
+        router.replace(`/leaderboard?player=${playerId}`);
+        return;
+      }
 
-  setPlayer(data.player);
-  setQuestion(incomingQuestion);
+      const incomingQuestion = data.question || null;
+      const isNewQuestion =
+        currentQuestionId.current !== (incomingQuestion?.id || null);
 
-  if (isNewQuestion) {
-    currentQuestionId.current = incomingQuestion?.id || null;
-    setSubmitted(Boolean(incomingQuestion?.has_submitted));
-    setAnswer(incomingQuestion?.submitted_answer || "");
-  } else if (incomingQuestion?.has_submitted) {
-    setSubmitted(true);
-    setAnswer(incomingQuestion.submitted_answer || "");
-  }
+      setPlayer(data.player);
+      setQuestion(incomingQuestion);
 
-  const alreadySubmitted = Boolean(incomingQuestion?.has_submitted);
+      if (isNewQuestion) {
+        currentQuestionId.current = incomingQuestion?.id || null;
+        setSubmitted(Boolean(incomingQuestion?.has_submitted));
+        setAnswer(incomingQuestion?.submitted_answer || "");
+      } else if (incomingQuestion?.has_submitted) {
+        setSubmitted(true);
+        setAnswer(incomingQuestion.submitted_answer || "");
+      }
 
-  if (alreadySubmitted) {
-    setMessage(
-      incomingQuestion.points_awarded === 1
-        ? "Correct! You earned 1 point."
-        : "Answer submitted!"
-    );
-  } else {
-    setMessage(
-      incomingQuestion
-        ? ""
-        : "Waiting for the host to release the next question..."
-    );
-  }
-}
-let pollTimer;
-let stopped = false;
+      const alreadySubmitted = Boolean(incomingQuestion?.has_submitted);
 
-    
+      if (alreadySubmitted) {
+        setMessage(
+          incomingQuestion.points_awarded === 1
+            ? "Correct! You earned 1 point."
+            : "Answer submitted!"
+        );
+      } else {
+        setMessage(
+          incomingQuestion
+            ? ""
+            : "Waiting for the host to release the next question..."
+        );
+      }
+    }
 
     async function refreshGame(token) {
       const { data, error } = await supabase.rpc(
@@ -96,8 +107,6 @@ let stopped = false;
         }
       );
 
-      console.log("PLAYER GAME DATA:", data);
-console.log("PLAYER GAME ERROR:", error);
       if (error || !data) {
         setMessage("Could not load your game. Please join again.");
         return;
@@ -130,16 +139,17 @@ console.log("PLAYER GAME ERROR:", error);
           () => refreshGame(token)
         )
         .subscribe();
+
       pollTimer = setInterval(() => refreshGame(token), 2000);
     }
 
     loadGame();
 
     return () => {
-  stopped = true;
-  clearInterval(pollTimer);
-  if (channel) supabase.removeChannel(channel);
-};
+      stopped = true;
+      clearInterval(pollTimer);
+      if (channel) supabase.removeChannel(channel);
+    };
   }, [playerId, router]);
 
   async function submitAnswer(event) {
@@ -193,74 +203,337 @@ console.log("PLAYER GAME ERROR:", error);
   }
 
   return (
-    <main style={{
-      maxWidth: 650,
-      margin: "40px auto",
-      padding: 24,
-      fontFamily: "Arial, sans-serif",
-      textAlign: "center"
-    }}>
-      <h1>BrewHausTrivia</h1>
+    <main
+      style={{
+        minHeight: "100vh",
+        background: colors.background,
+        color: colors.cream,
+        padding: "28px 18px",
+        boxSizing: "border-box",
+        fontFamily: "Arial, Helvetica, sans-serif"
+      }}
+    >
+      <div
+        style={{
+          maxWidth: 650,
+          margin: "0 auto"
+        }}
+      >
+        <header
+          style={{
+            textAlign: "center",
+            padding: "12px 0 26px",
+            borderBottom: `1px solid ${colors.border}`,
+            marginBottom: 28
+          }}
+        >
+          <h1
+            style={{
+              fontSize: 30,
+              letterSpacing: 2,
+              fontWeight: 700,
+              margin: 0,
+              color: colors.cream
+            }}
+          >
+            BREWHAUS<span style={{ color: colors.gold }}>TRIVIA</span>
+          </h1>
 
-      {player ? (
-        <>
-          <h2>Welcome, {player.nickname}!</h2>
-          <h3>Your score: {player.total_score}</h3>
+          <p
+            style={{
+              color: colors.muted,
+              fontSize: 13,
+              letterSpacing: 2,
+              marginTop: 9
+            }}
+          >
+            PUB TRIVIA
+          </p>
+        </header>
 
-          {question ? (
-            <section>
-              <p>
-                Round {question.round_number} · Question {question.question_number}
-              </p>
-
-              <h2>{question.prompt}</h2>
-
-              <form onSubmit={submitAnswer}>
-                <input
-                  value={answer}
-                  onChange={(event) => setAnswer(event.target.value)}
-                  placeholder="Type your answer"
-                  disabled={submitted}
+        {player && (
+          <>
+            <section
+              style={{
+                background: colors.panel,
+                border: `1px solid ${colors.border}`,
+                borderRadius: 10,
+                padding: "17px 20px",
+                marginBottom: 22,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 12
+              }}
+            >
+              <div>
+                <p
                   style={{
-                    width: "100%",
-                    padding: 14,
-                    boxSizing: "border-box",
-                    marginBottom: 12
+                    color: colors.muted,
+                    fontSize: 13,
+                    margin: "0 0 5px"
                   }}
-                />
-
-                <button
-                  type="submit"
-                  disabled={submitted || !answer.trim()}
                 >
-                  {submitted ? "Answer Submitted" : "Submit Answer"}
-                </button>
-              </form>
+                  PLAYER
+                </p>
 
-              {question.correct_answer ? (
-                <section style={{
-                  marginTop: 24,
-                  padding: 16,
-                  background: "#e8f5e9",
-                  borderRadius: 8
-                }}>
-                  <h3>Correct Answer</h3>
-                  <p>{question.correct_answer}</p>
-                </section>
-              ) : null}
+                <h2
+                  style={{
+                    fontSize: 19,
+                    margin: 0,
+                    fontWeight: 600
+                  }}
+                >
+                  {player.nickname}
+                </h2>
+              </div>
+
+              <div style={{ textAlign: "right" }}>
+                <p
+                  style={{
+                    color: colors.muted,
+                    fontSize: 13,
+                    margin: "0 0 5px"
+                  }}
+                >
+                  YOUR SCORE
+                </p>
+
+                <h2
+                  style={{
+                    color: colors.gold,
+                    fontSize: 25,
+                    margin: 0
+                  }}
+                >
+                  {player.total_score}
+                </h2>
+              </div>
             </section>
-          ) : null}
-        </>
-      ) : null}
 
-      {message && <p>{message}</p>}
+            {question ? (
+              <section
+                style={{
+                  background: colors.panel,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 10,
+                  padding: "26px 22px",
+                  textAlign: "center"
+                }}
+              >
+                <p
+                  style={{
+                    color: colors.gold,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    letterSpacing: 1,
+                    margin: "0 0 22px"
+                  }}
+                >
+                  ROUND {question.round_number}
+                  {"  ·  "}
+                  QUESTION {question.question_number}
+                </p>
+
+                <h2
+                  style={{
+                    fontSize: 25,
+                    lineHeight: 1.45,
+                    fontWeight: 600,
+                    margin: "0 0 28px",
+                    color: colors.cream
+                  }}
+                >
+                  {question.prompt}
+                </h2>
+
+                <form onSubmit={submitAnswer}>
+                  <input
+                    value={answer}
+                    onChange={(event) => setAnswer(event.target.value)}
+                    placeholder="Type your answer here"
+                    disabled={submitted}
+                    style={{
+                      width: "100%",
+                      boxSizing: "border-box",
+                      padding: "16px",
+                      background: "#191C1E",
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: 6,
+                      color: colors.cream,
+                      fontSize: 18,
+                      outline: "none",
+                      marginBottom: 14
+                    }}
+                  />
+
+                  <button
+                    type="submit"
+                    disabled={submitted || !answer.trim()}
+                    style={{
+                      width: "100%",
+                      padding: "16px",
+                      background:
+                        submitted || !answer.trim()
+                          ? "#55534D"
+                          : colors.gold,
+                      color:
+                        submitted || !answer.trim()
+                          ? "#D0CCC3"
+                          : "#191919",
+                      border: "none",
+                      borderRadius: 6,
+                      fontSize: 17,
+                      fontWeight: 700,
+                      cursor:
+                        submitted || !answer.trim()
+                          ? "not-allowed"
+                          : "pointer"
+                    }}
+                  >
+                    {submitted ? "ANSWER SUBMITTED" : "SUBMIT ANSWER"}
+                  </button>
+                </form>
+
+                {submitted && (
+                  <div
+                    style={{
+                      marginTop: 20,
+                      padding: 15,
+                      background: "#303633",
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: 6
+                    }}
+                  >
+                    <p
+                      style={{
+                        color: colors.green,
+                        fontWeight: 600,
+                        margin: 0
+                      }}
+                    >
+                      {message}
+                    </p>
+                  </div>
+                )}
+
+                {question.correct_answer && (
+                  <div
+                    style={{
+                      marginTop: 22,
+                      padding: 18,
+                      background: "#303633",
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: 6
+                    }}
+                  >
+                    <p
+                      style={{
+                        color: colors.gold,
+                        fontSize: 13,
+                        fontWeight: 700,
+                        letterSpacing: 1,
+                        margin: "0 0 8px"
+                      }}
+                    >
+                      CORRECT ANSWER
+                    </p>
+
+                    <p
+                      style={{
+                        fontSize: 20,
+                        fontWeight: 600,
+                        margin: 0
+                      }}
+                    >
+                      {question.correct_answer}
+                    </p>
+                  </div>
+                )}
+              </section>
+            ) : (
+              <section
+                style={{
+                  background: colors.panel,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 10,
+                  padding: "45px 22px",
+                  textAlign: "center"
+                }}
+              >
+                <h2
+                  style={{
+                    color: colors.gold,
+                    fontSize: 22,
+                    marginTop: 0
+                  }}
+                >
+                  You're in the game
+                </h2>
+
+                <p
+                  style={{
+                    color: colors.muted,
+                    fontSize: 16,
+                    lineHeight: 1.6,
+                    marginBottom: 0
+                  }}
+                >
+                  {message}
+                </p>
+              </section>
+            )}
+          </>
+        )}
+
+        {!player && (
+          <section
+            style={{
+              background: colors.panel,
+              border: `1px solid ${colors.border}`,
+              borderRadius: 10,
+              padding: 30,
+              textAlign: "center"
+            }}
+          >
+            <p style={{ color: colors.muted }}>{message}</p>
+          </section>
+        )}
+
+        <footer
+          style={{
+            textAlign: "center",
+            padding: "28px 0 10px",
+            color: "#777A7B",
+            fontSize: 12,
+            letterSpacing: 1
+          }}
+        >
+          BREWHAUSTRIVIA
+        </footer>
+      </div>
     </main>
   );
 }
 
 export default function PlayPage() {
   return (
-    <Suspense fallback={<main>Loading game...</main>}>
+    <Suspense
+      fallback={
+        <main
+          style={{
+            minHeight: "100vh",
+            background: "#17191B",
+            color: "#F1EBDD",
+            display: "grid",
+            placeItems: "center",
+            fontFamily: "Arial, sans-serif"
+          }}
+        >
+          Loading game...
+        </main>
+      }
+    >
       <PlayContent />
     </Suspense>
   );
