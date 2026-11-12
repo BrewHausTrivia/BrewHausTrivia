@@ -15,6 +15,7 @@ function PlayContent() {
   const [answer, setAnswer] = useState("");
   const [message, setMessage] = useState("Loading game...");
   const [submitted, setSubmitted] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState("checking");
 
   const currentQuestionId = useRef(null);
 
