@@ -45,6 +45,100 @@ const CATEGORY_OPTIONS = {
   ]
 };
 
+// Reads the bulk text box and separates it into individual questions.
+function parseBulkQuestions(text) {
+  const blocks = text
+    .trim()
+    .split(/\n\s*\n/)
+    .filter((block) => block.trim());
+
+  const questions = [];
+  const errors = [];
+
+  blocks.forEach((block, index) => {
+    const question = {
+      prompt: "",
+      answer: "",
+      variants: []
+    };
+
+    let currentField = null;
+    const lines = block.split("\n");
+
+    lines.forEach((line) => {
+      const trimmedLine = line.trim();
+
+      if (!trimmedLine) return;
+
+      const match = trimmedLine.match(
+        /^(Question|Answer|Also accepted)\s*:\s*(.*)$/i
+      );
+
+      if (match) {
+        const field = match[1].toLowerCase();
+        const value = match[2].trim();
+
+        if (field === "question") {
+          question.prompt = value;
+          currentField = "question";
+        } else if (field === "answer") {
+          question.answer = value;
+          currentField = "answer";
+        } else {
+          question.variants = value
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean);
+          currentField = "variants";
+        }
+      } else if (currentField === "question") {
+        question.prompt +=
+          (question.prompt ? " " : "") + trimmedLine;
+      } else if (currentField === "answer") {
+        question.answer +=
+          (question.answer ? " " : "") + trimmedLine;
+      } else if (currentField === "variants") {
+        question.variants.push(trimmedLine);
+      } else {
+        errors.push(
+          `Question ${index + 1}: Unexpected line "${trimmedLine}".`
+        );
+      }
+    });
+
+    if (!question.prompt) {
+      errors.push(`Question ${index + 1}: Missing question text.`);
+    }
+
+    if (!question.answer) {
+      errors.push(`Question ${index + 1}: Missing correct answer.`);
+    }
+
+    const variantsText = question.variants.join(", ").trim();
+
+    if (
+      variantsText.toLowerCase() === "none" ||
+      variantsText.toLowerCase() === "n/a" ||
+      variantsText === "-"
+    ) {
+      question.variants = [];
+    }
+
+    if (
+      question.prompt.length > 0 &&
+      question.answer.length > 0
+    ) {
+      questions.push(question);
+    }
+  });
+
+  return {
+    questions,
+    errors,
+    totalBlocks: blocks.length
+  };
+}
+
 export default function QuestionBank() {
   const router = useRouter();
 
@@ -63,11 +157,16 @@ export default function QuestionBank() {
   const [answer, setAnswer] = useState("");
   const [variants, setVariants] = useState("");
 
+  const [bulkText, setBulkText] = useState("");
+  const [bulkSaving, setBulkSaving] = useState(false);
+
   const [editingId, setEditingId] = useState(null);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadingGame, setLoadingGame] = useState(false);
+
+  const bulkResult = parseBulkQuestions(bulkText);
 
   async function loadQuestions() {
     const {
@@ -116,8 +215,6 @@ export default function QuestionBank() {
     loadQuestions();
   }, []);
 
-  // Clear only the question fields.
-  // Keep round, category, and subcategory selected.
   function clearForm() {
     setPrompt("");
     setAnswer("");
@@ -170,6 +267,59 @@ export default function QuestionBank() {
     setSaving(false);
   }
 
+  async function saveBulkQuestions() {
+    if (bulkResult.totalBlocks === 0) {
+      setMessage("Paste some questions into the bulk text box first.");
+      return;
+    }
+
+    if (bulkResult.errors.length > 0) {
+      setMessage(
+        "Fix the formatting issues before importing your questions."
+      );
+      return;
+    }
+
+    if (bulkResult.questions.length === 0) {
+      setMessage("No valid questions were found.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Import ${bulkResult.questions.length} questions into Round ${round}, ${category} → ${subcategory}?`
+    );
+
+    if (!confirmed) return;
+
+    setBulkSaving(true);
+    setMessage("");
+
+    const questionsToInsert = bulkResult.questions.map((item) => ({
+      round_number: Number(round),
+      category,
+      subcategory,
+      prompt: item.prompt.trim(),
+      correct_answer: item.answer.trim(),
+      accepted_variants: item.variants
+    }));
+
+    const { error } = await supabase
+      .from("question_bank")
+      .insert(questionsToInsert);
+
+    if (error) {
+      setMessage(`Bulk import failed: ${error.message}`);
+    } else {
+      setMessage(
+        `Success! ${questionsToInsert.length} questions were added to your Question Bank.`
+      );
+      setBulkText("");
+      await loadQuestions();
+    }
+
+    setBulkSaving(false);
+  }
+
   function editQuestion(question) {
     const savedCategory = question.category || "General";
     const availableSubcategories =
@@ -218,7 +368,8 @@ export default function QuestionBank() {
 
       const roundCount = previous.filter((selectedId) =>
         questions.some(
-          (q) => q.id === selectedId &&
+          (q) =>
+            q.id === selectedId &&
             q.round_number === roundNumber
         )
       ).length;
@@ -441,10 +592,183 @@ export default function QuestionBank() {
           background: "#242729",
           border: "1px solid #3A3D3F",
           borderRadius: 10,
+          padding: 20,
+          marginBottom: 25
+        }}
+      >
+        <h2>Bulk Add Questions</h2>
+
+        <p>
+          Choose the round and category below, then paste your
+          questions into the box. Separate each question with a
+          blank line.
+        </p>
+
+        <label>Round for this batch</label>
+        <br />
+
+        <select
+          value={round}
+          onChange={(e) => setRound(e.target.value)}
+        >
+          <option value="1">Round 1</option>
+          <option value="2">Round 2</option>
+          <option value="3">Round 3</option>
+        </select>
+
+        <br /><br />
+
+        <label>Category</label>
+        <br />
+
+        <select
+          value={category}
+          onChange={(e) => {
+            const nextCategory = e.target.value;
+            setCategory(nextCategory);
+            setSubcategory(CATEGORY_OPTIONS[nextCategory][0]);
+          }}
+        >
+          {Object.keys(CATEGORY_OPTIONS).map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
+        </select>
+
+        <br /><br />
+
+        <label>Subcategory</label>
+        <br />
+
+        <select
+          value={subcategory}
+          onChange={(e) => setSubcategory(e.target.value)}
+        >
+          {(CATEGORY_OPTIONS[category] || ["General"]).map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
+        </select>
+
+        <br /><br />
+
+        <label>
+          **Paste your questions below**
+        </label>
+
+        <textarea
+          value={bulkText}
+          onChange={(e) => setBulkText(e.target.value)}
+          placeholder={`Question: What is the capital of France?
+Answer: Paris
+Also accepted: None
+
+Question: Who sang Thriller?
+Answer: Michael Jackson
+Also accepted: MJ
+
+Question: What year did the first iPhone release?
+Answer: 2007
+Also accepted: None`}
+          rows={16}
+          style={{
+            width: "100%",
+            padding: 12,
+            marginTop: 8,
+            background: "#17191B",
+            color: "#F1EBDD",
+            border: "1px solid #3A3D3F",
+            borderRadius: 6,
+            fontFamily: "monospace",
+            fontSize: 14,
+            boxSizing: "border-box"
+          }}
+        />
+
+        <p>
+          Use <strong>Question:</strong>, <strong>Answer:</strong>,
+          and <strong>Also accepted:</strong> for each entry.
+          Put a blank line between questions. Use "None" if there
+          are no additional accepted answers.
+        </p>
+
+        {bulkText.trim() && (
+          <div
+            style={{
+              background: "#17191B",
+              border: "1px solid #3A3D3F",
+              borderRadius: 8,
+              padding: 14,
+              marginTop: 15
+            }}
+          >
+            <h3>Import Preview</h3>
+
+            <p>
+              <strong>
+                {bulkResult.questions.length} valid questions found
+              </strong>
+            </p>
+
+            {bulkResult.errors.length > 0 && (
+              <div style={{ color: "#E6A09A" }}>
+                <strong>
+                  Please fix these issues before importing:
+                </strong>
+
+                <ul>
+                  {bulkResult.errors.map((error, index) => (
+                    <li key={index}>{error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {bulkResult.questions.length > 0 && (
+              <p>
+                These questions will be saved to Round {round},
+                {" "}{category} → {subcategory}.
+              </p>
+            )}
+          </div>
+        )}
+
+        <button
+          onClick={saveBulkQuestions}
+          disabled={
+            bulkSaving ||
+            !bulkText.trim() ||
+            bulkResult.questions.length === 0 ||
+            bulkResult.errors.length > 0
+          }
+          style={{
+            marginTop: 15,
+            padding: "12px 20px",
+            background: "#B79A62",
+            color: "#17191B",
+            border: "none",
+            borderRadius: 6,
+            fontWeight: "bold",
+            cursor: "pointer"
+          }}
+        >
+          {bulkSaving
+            ? "Importing Questions..."
+            : `Import ${bulkResult.questions.length} Questions`}
+        </button>
+      </section>
+
+      <section
+        style={{
+          background: "#242729",
+          border: "1px solid #3A3D3F",
+          borderRadius: 10,
           padding: 20
         }}
       >
-        <h2>{editingId ? "Edit Question" : "Add a Question"}</h2>
+        <h2>{editingId ? "Edit Question" : "Add a Single Question"}</h2>
 
         <label>Round</label>
         <br />
@@ -618,26 +942,9 @@ export default function QuestionBank() {
         <strong>Total selected: {selectedIds.length} / 30</strong>
       </p>
 
-      {renderRound(
-        "ROUND 1",
-        filteredRoundOne,
-        1,
-        selectedOne
-      )}
-
-      {renderRound(
-        "ROUND 2",
-        filteredRoundTwo,
-        2,
-        selectedTwo
-      )}
-
-      {renderRound(
-        "ROUND 3",
-        filteredRoundThree,
-        3,
-        selectedThree
-      )}
+      {renderRound("ROUND 1", filteredRoundOne, 1, selectedOne)}
+      {renderRound("ROUND 2", filteredRoundTwo, 2, selectedTwo)}
+      {renderRound("ROUND 3", filteredRoundThree, 3, selectedThree)}
 
       <section
         style={{
