@@ -77,34 +77,47 @@ export default function JoinGame() {
         }
       );
 
-      if (error) {
-        const errorText = (error.message || "").toLowerCase();
+      const responseError =
+        error?.message ||
+        data?.error ||
+        data?.message ||
+        "";
+
+      if (error || responseError) {
+        const errorText = String(responseError).toLowerCase();
 
         if (
-          errorText.includes("invalid") ||
+          errorText.includes("game not found") ||
           errorText.includes("not found") ||
+          errorText.includes("invalid") ||
           errorText.includes("does not exist")
         ) {
-          setMessage("That game code is not valid. Please check it and try again.");
+          setMessage(
+            "We couldn't find that game. Please check your code or ask the host if registration is still open."
+          );
         } else if (
           errorText.includes("registration") ||
           errorText.includes("closed")
         ) {
-          setMessage("Registration for this game is closed.");
+          setMessage("Registration for this game is closed. Please ask the host.");
         } else if (
           errorText.includes("full") ||
           errorText.includes("maximum")
         ) {
           setMessage("This game has reached its player limit.");
         } else {
-          setMessage("We couldn't join you to the game. Please try again.");
+          setMessage(
+            "We couldn't join you to the game. Please check your details and try again."
+          );
         }
 
         return;
       }
 
       if (!data?.player_id || !data?.session_token) {
-        setMessage("We couldn't complete your registration. Please try again.");
+        setMessage(
+          "We couldn't complete your registration. Please try again."
+        );
         return;
       }
 
@@ -117,9 +130,13 @@ export default function JoinGame() {
     } catch (error) {
       if (!navigator.onLine) {
         setIsOnline(false);
-        setMessage("Your connection was lost. Please reconnect and try again.");
+        setMessage(
+          "Your connection was lost. Please reconnect and try again."
+        );
       } else {
-        setMessage("Something went wrong while joining. Please try again.");
+        setMessage(
+          "Something went wrong while joining. Please try again."
+        );
       }
     } finally {
       setLoading(false);
