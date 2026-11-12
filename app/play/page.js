@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
@@ -15,6 +15,7 @@ function PlayContent() {
   const [answer, setAnswer] = useState("");
   const [message, setMessage] = useState("Loading game...");
   const [submitted, setSubmitted] = useState(false);
+  const currentQuestionId = useRef(null);
 
   useEffect(() => {
     if (!playerId) {
