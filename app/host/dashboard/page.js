@@ -670,7 +670,7 @@ export default function Dashboard() {
         <footer style={styles.footer}>
           <button
             style={secondaryButtonStyle}
-            onClick={() => router.push("/host/questions")}
+            onClick={() => router.push("/host/question-bank")}
           >
             MANAGE QUESTIONS
           </button>
